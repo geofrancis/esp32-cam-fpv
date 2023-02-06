@@ -4,7 +4,7 @@ BIN := gs
 SRCS := src/main.cpp \
 	src/droid_sans_font.cpp \
 	src/HUD.cpp \
-	src/imgui_impl_opengl3.cpp \
+	src/imgui_impl_opengl2.cpp \
 	src/PI_HAL.cpp \
 	src/Comms.cpp \
 	src/Video_Decoder.cpp \
@@ -48,21 +48,12 @@ LD := g++
 # tar
 TAR := tar
 
-ifeq ($(shell arch), aarch64)
-INCLUDE  := -Isrc \
-	-Isrc/utils \
-	-Isrc/imgui \
-	-I../components/common \
-	-I/opt/vc/include/ \
-	-I/usr/include/freetype2
-else
 INCLUDE  := -Isrc \
 	-Isrc/utils \
 	-Isrc/imgui \
 	-I../components/common \
 	-I/usr/include/ \
 	-I/usr/include/freetype2
-endif
 
 # C flags
 CFLAGS := -std=c11
@@ -72,14 +63,14 @@ CXXFLAGS := -std=c++17
 # C/C++ flags
 is_pi = 
 ifeq ($(shell arch), aarch64)
-	is_pi = yesl
+	is_pi = yes
 endif
 ifeq ($(shell arch), armv7l)
 	is_pi = yes
 endif
 
 ifdef is_pi
-CPPFLAGS := -O3 -DNDEBUG -ffast-math -funroll-loops -mcpu=cortex-a8 -mfpu=neon -Wall -DRASPBERRY_PI $(INCLUDE)
+CPPFLAGS := -O3 -DNDEBUG -ffast-math -funroll-loops   -Wall  $(INCLUDE)
 else
 CPPFLAGS := -O3 -DNDEBUG -ffast-math -funroll-loops -Wall $(INCLUDE)
 endif
@@ -89,9 +80,10 @@ endif
 #LDFLAGS := -L/usr/lib -L=/opt/vc/lib -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lmmal_core -lmmal_util -lmmal_vc_client -lvcos -lbcm_host -lbrcmGLESv2 -lbrcmEGL -lts
 #LDFLAGS := -L/usr/lib -L=/opt/vc/lib -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lSDL2 -lGLESv2 -lturbojpeg -lmmal_core -lmmal_util -lmmal_vc_client -lvcos -lepoxy
 ifdef is_pi
-LDFLAGS := -L/usr/lib -L=/opt/vc/lib -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lSDL2 -lturbojpeg -lpcap -lGLESv2 -lpigpio
+LDFLAGS := -L/usr/lib/aarch64-linux-gnu/  
+LDLIBS := -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lSDL2 -lturbojpeg -lpcap -lGLESv2 -lGL -ldl
 else
-LDFLAGS := -L/usr/lib
+LDFLAGS := -L/usr/lib/aarch64-linux-gnu/
 LDLIBS := -std=c++17 -pthread -lGLESv2 -lSDL2 -lfreetype -lpcap -lturbojpeg
 endif
 
@@ -145,7 +137,7 @@ help:
 
 $(BIN): $(OBJS)
 ifeq ($(shell arch), aarch64)
-	$(LINK.o) $^
+	$(LINK.o) $^ $(LDLIBS)
 else
 	$(LINK.o) $^ $(LDLIBS)
 endif
