@@ -19,7 +19,7 @@ public:
 
     ImVec2 get_display_size() const override;
     void set_backlight(float brightness) override; //0..1
-
+    void set_video_channel(unsigned int channel, unsigned int id);
     bool process() override;
 
 private:

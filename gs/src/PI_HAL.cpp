@@ -22,8 +22,8 @@
 
 #ifdef USE_SDL
 #include <SDL2/SDL.h>
-#include <GLES3/gl3.h>
-#include "imgui_impl_sdl.h"
+#include <GLES2/gl2.h>
+#include "imgui_impl_sdl2.h"
 #else
 extern "C"
 {
@@ -253,84 +253,86 @@ bool PI_HAL::init_display_dispmanx()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+static GLuint       g_VideoTextureChannels[3];
+void PI_HAL::set_video_channel(unsigned int channel, unsigned int id)
+{
+    g_VideoTextureChannels[channel] = id;   
+}
 
 bool PI_HAL::init_display_sdl()
 {
-    //SDL_LogSetAllPriority(SDL_LOG_PRIORITY_VERBOSE);
+    // Setup SDL
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
+    {
+        printf("Error: %s\n", SDL_GetError());
+        return -1;
+    }
 
-#ifdef USE_SDL
-    SDL_Init(SDL_INIT_VIDEO);
-#ifdef USE_BOUBLE_BUFFER
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    // Decide GL+GLSL versions
+#if defined(IMGUI_IMPL_OPENGL_ES2)
+    // GL ES 2.0 + GLSL 100
+    const char* glsl_version = "#version 100";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#elif defined(__APPLE__)
+    // GL 3.2 Core + GLSL 150
+    const char* glsl_version = "#version 150";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG); // Always required on Mac
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
 #else
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 0);
-#endif
-
-    SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
-    SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0); 
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0); 
-
+    // GL 3.0 + GLSL 130
+    const char* glsl_version = "#version 130";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-    SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1); 
-
-    SDL_SetHintWithPriority(SDL_HINT_VIDEO_DOUBLE_BUFFER, "1", SDL_HINT_OVERRIDE);
-    //SDL_SetHintWithPriority(SDL_HINT_RENDER_VSYNC, "0", SDL_HINT_OVERRIDE);
-    
-
-    int driver_count = SDL_GetNumVideoDrivers();
-    LOGI("Drivers: {}", driver_count);
-    for (int i = 0; i < driver_count; i++)
-    {
-        LOGI("Driver {}: {}", i, SDL_GetVideoDriver(i));
-    }
-
-    SDL_DisplayMode mode;
-    int res = SDL_GetCurrentDisplayMode(0, &mode);
-    assert(res == 0);
-
-	m_impl->width = mode.w;
-	m_impl->height = mode.h;
-    LOGI("Mode {}: {}x{}", res, mode.w, mode.h);
-
-    // Create an application window with the following settings:
-    m_impl->window = SDL_CreateWindow(
-        "ESP32 FPV",                  // window title
-        0,           // initial x position
-        0,           // initial y position
-        m_impl->width,                               // width, in pixels
-        m_impl->height,                               // height, in pixels
-        SDL_WINDOW_FULLSCREEN | 
-        SDL_WINDOW_OPENGL | 
-        SDL_WINDOW_SHOWN | 
-        SDL_WINDOW_BORDERLESS
-    );
-
-    // Check that the window was successfully created
-    if (m_impl->window == nullptr) 
-    {
-        // In the case that the window could not be made...
-        LOGE("Cannot create window: {}", SDL_GetError());
-        return false;
-    }
-
-    m_impl->context = SDL_GL_CreateContext(m_impl->window);
-    int err = SDL_GL_MakeCurrent(m_impl->window, m_impl->context);
-    if (err != 0) 
-        LOGE("Failed to create context: {}", err);
-
-    ImGui::CreateContext();
-    ImGui_ImplSDL2_InitForOpenGL(m_impl->window, m_impl->context);
-
-    SDL_GL_SetSwapInterval(0);
-
-    ImGui_ImplSDL2_SetMouseEnabled(true);
-
 #endif
+
+    // From 2.0.18: Enable native IME.
+#ifdef SDL_HINT_IME_SHOW_UI
+    SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
+#endif
+
+    // Create window with graphics context
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    m_impl->window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+    SDL_GLContext gl_context = SDL_GL_CreateContext(m_impl->window);
+    SDL_GL_MakeCurrent(m_impl->window, gl_context);
+    SDL_GL_SetSwapInterval(1); // Enable vsync
+
+    m_impl->width = 1280;
+    m_impl->height = 720;
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+    //ImGui::StyleColorsLight();
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplSDL2_InitForOpenGL(m_impl->window, gl_context);
+    ImGui_ImplOpenGL3_Init(glsl_version);
+
+    ImVec2 display_size = get_display_size();
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScrollbarSize = display_size.x / 80.f;
+    style.TouchExtraPadding = ImVec2(style.ScrollbarSize * 2.f, style.ScrollbarSize * 2.f);
+    //style.ItemSpacing = ImVec2(size.x / 200, size.x / 200);
+    //style.ItemInnerSpacing = ImVec2(style.ItemSpacing.x / 2, style.ItemSpacing.y / 2);
+    io.FontGlobalScale = 1.f;
+
+    
     return true;
 }
 
@@ -399,84 +401,89 @@ void PI_HAL::shutdown_display()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+void test_callback(const ImDrawList* parent_list, const ImDrawCmd* pcmd){
+        const ImDrawIdx* idx_buffer_offset = 0;
+#define GLCHK             
+    GLCHK(glDisable(GL_BLEND));
+    GLCHK(glActiveTexture(GL_TEXTURE0));
+    GLCHK(glBindTexture(GL_TEXTURE_2D, g_VideoTextureChannels[0]));
+    GLCHK(glActiveTexture(GL_TEXTURE1));
+    GLCHK(glBindTexture(GL_TEXTURE_2D, g_VideoTextureChannels[1]));
+    GLCHK(glActiveTexture(GL_TEXTURE2));
+    GLCHK(glBindTexture(GL_TEXTURE_2D, g_VideoTextureChannels[2]));
 
+    GLCHK(glDrawElements(GL_TRIANGLES, (GLsizei)pcmd->ElemCount, sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, idx_buffer_offset));
+
+    GLCHK(glActiveTexture(GL_TEXTURE0));
+    GLCHK(glEnable(GL_BLEND));
+#undef GLCHK
+}
 bool PI_HAL::update_display()
 {
-    //lock_main_context();
-
-    glScissor(0, 0, m_impl->width, m_impl->height);
-    glClearColor(0, 0, 0, 0);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-#ifdef USE_MANGA_SCREEN2
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData(),false);
-#else
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData(),true);
-#endif
-    
-#ifdef USE_SDL
-    ImGuiIO& io = ImGui::GetIO();
     SDL_Event event;
-    while (SDL_PollEvent(&event)) 
+    bool show_demo_window = false;
+    bool show_another_window = false;
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    while (SDL_PollEvent(&event))
     {
         ImGui_ImplSDL2_ProcessEvent(&event);
-        switch (event.type) 
+        switch(event.type){
+        case SDL_FINGERMOTION:
+        case SDL_FINGERDOWN:
+        case SDL_FINGERUP:
         {
-            case SDL_FINGERMOTION:
-            case SDL_FINGERDOWN:
-            case SDL_FINGERUP:
-            {
-                SDL_TouchFingerEvent& ev = *(SDL_TouchFingerEvent*)&event;
-                io.MousePos = ImVec2(ev.x * m_impl->width, ev.y * m_impl->height);
-                io.MouseDown[0] = event.type == SDL_FINGERUP ? false : true;
-            }
+            SDL_TouchFingerEvent& ev = *(SDL_TouchFingerEvent*)&event;
+            io.MousePos = ImVec2(ev.x * m_impl->width, ev.y * m_impl->height);
+            io.MouseDown[0] = event.type == SDL_FINGERUP ? false : true;
+        }
+        break;
+        case SDL_QUIT:
+            shutdown_display();
             break;
-            case SDL_QUIT:
-                break;
-            case SDL_KEYUP:
-                break;
         }
     }
 
-    glFlush();
-    SDL_GL_SwapWindow(m_impl->window);
-    //SDL_GL_SwapWindow(m_impl->window);
-    //SDL_GL_SwapWindow(m_impl->window);
+    // Start the Dear ImGui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
+    ImGui::NewFrame();
 
-    ImGui_ImplSDL2_NewFrame(m_impl->window);
-#else
-    eglSwapBuffers(m_impl->display, m_impl->surface);
-#endif
+    // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+    if (show_demo_window)
+        ImGui::ShowDemoWindow(&show_demo_window);
 
-    Clock::time_point now = Clock::now();
-#ifdef USE_MANGA_SCREEN2
-    if (m_impl->target_backlight != m_impl->backlight && now - m_impl->backlight_tp >= std::chrono::milliseconds(50))
+    // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
     {
-        m_impl->backlight = m_impl->target_backlight;
-        m_impl->backlight_tp = now;
+        static float f = 0.0f;
+        static int counter = 0;
 
-        float b = m_impl->target_backlight;
-        std::atomic_bool& cancelled = m_impl->backlight_future_cancelled;
+        ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
 
-        cancelled = true;
-        if (m_impl->backlight_future.valid())
-            m_impl->backlight_future.wait();
+        ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
 
-        cancelled = false;
 
-        m_impl->backlight_future = std::async(std::launch::async, [this, b, &cancelled]()
-        {
-            if (!cancelled)
-            {
-                std::string command = "backlight " + std::to_string((int)(b * 100.f + 0.5f)) + "\r";
-                fwrite((const uint8_t*)command.data(), command.size(), 1, m_impl->backlight_uart.get());
-            }
-        });
+        ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
+
+        if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
+            counter++;
+        ImGui::SameLine();
+        ImGui::Text("counter = %d", counter);
+
+        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+        ImGui::End();
     }
-#endif
+    //ImGui::GetWindowDrawList()->AddCallback(test_callback,0);
+    ImGui::GetWindowDrawList()->AddImage((ImTextureID)g_VideoTextureChannels[0],ImVec2(0,0),ImVec2(640,480));
 
-    //unlock_main_context();
-
+    // Rendering
+    ImGui::Render();
+    glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+    glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
+    glClear(GL_COLOR_BUFFER_BIT);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    SDL_GL_SwapWindow(m_impl->window);
+    
     return true;
 }
 
@@ -616,8 +623,6 @@ bool PI_HAL::init()
     io.Fonts->AddFontDefault();
     io.Fonts->AddFontFromMemoryTTF(s_font_droid_sans, 16, 16.f);
     io.Fonts->Build();
-    ImGui_ImplOpenGL3_Init();
-    ImGui_ImplOpenGL3_NewFrame();
 
     return true;
 }

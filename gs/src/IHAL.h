@@ -17,6 +17,6 @@ public:
 
     virtual ImVec2 get_display_size() const = 0;
     virtual void set_backlight(float brightness) = 0; //0..1
-
+    virtual void set_video_channel(unsigned int channel, unsigned int id)=0;
     virtual bool process() = 0;
 };

@@ -59,7 +59,7 @@ static Ground2Air_Config_Packet s_ground2air_config_packet;
 static uint32_t s_test_latency_gpio_value = 0;
 static Clock::time_point s_test_latency_gpio_last_tp = Clock::now();
 #endif
-
+float video_fps = 0;
 static void comms_thread_proc()
 {
     Clock::time_point last_stats_tp = Clock::now();
@@ -99,10 +99,10 @@ static void comms_thread_proc()
                 ping_avg = std::chrono::seconds(0);
             }
 
-            LOGI("Sent: {}, RX len: {}, RSSI: {}, Latency: {}/{}/{}", sent_count, total_data, min_rssi, 
+            LOGI("Sent: {}, RX len: {}, RSSI: {}, Latency: {}/{}/{},vfps:{}", sent_count, total_data, min_rssi, 
                 std::chrono::duration_cast<std::chrono::milliseconds>(ping_min).count(),
                 std::chrono::duration_cast<std::chrono::milliseconds>(ping_max).count(),
-                std::chrono::duration_cast<std::chrono::milliseconds>(ping_avg).count() / ping_count);
+                std::chrono::duration_cast<std::chrono::milliseconds>(ping_avg).count() / ping_count,video_fps);
 
             ping_min = std::chrono::seconds(999);
             ping_max = std::chrono::seconds(0);
@@ -287,15 +287,9 @@ int run()
 {
     HUD hud(*s_hal);
 
-    ImVec2 display_size = s_hal->get_display_size();
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.ScrollbarSize = display_size.x / 80.f;
-    style.TouchExtraPadding = ImVec2(style.ScrollbarSize * 2.f, style.ScrollbarSize * 2.f);
-    //style.ItemSpacing = ImVec2(size.x / 200, size.x / 200);
-    //style.ItemInnerSpacing = ImVec2(style.ItemSpacing.x / 2, style.ItemSpacing.y / 2);
 
     ImGuiIO& io = ImGui::GetIO();
-    io.FontGlobalScale = 2.f;
+
 
     s_decoder.init(*s_hal);
 
@@ -311,12 +305,12 @@ int run()
     Ground2Air_Config_Packet config;
     config.wifi_rate = WIFI_Rate::RATE_G_54M_ODFM;//RATE_G_18M_ODFM;
 
-    config.camera.resolution = (Resolution)0;
+    config.camera.resolution = Resolution::SVGA;
     config.camera.fps_limit = 0;
     config.camera.quality = 63;
 
     size_t video_frame_count = 0;
-    float video_fps = 0;
+
 
     Clock::time_point last_stats_tp = Clock::now();
     Clock::time_point last_tp = Clock::now();
@@ -326,27 +320,10 @@ int run()
         size_t count = s_decoder.lock_output();
         video_frame_count += count;
         for (size_t i = 0; i < 3; i++)
-            ImGui_SetVideoTextureChannel(i, s_decoder.get_video_texture_id(i));
+            s_hal->set_video_channel(i,s_decoder.get_video_texture_id(i));
+           // ImGui_SetVideoTextureChannel(i, s_decoder.get_video_texture_id(i));
 
         s_hal->process();
-        //std::this_thread::yield();
-
-// #ifdef TEST_LATENCY
-//         if (s_test_latency_gpio_value == 0 && Clock::now() - s_test_latency_gpio_last_tp >= std::chrono::milliseconds(400))
-//         {
-//             s_test_latency_gpio_value = 1;
-//             gpioWrite(17, s_test_latency_gpio_value);
-//             s_test_latency_gpio_last_tp = Clock::now();
-//             //s_decoder.inject_test_data(s_test_latency_gpio_value);
-//         }
-//         if (s_test_latency_gpio_value != 0 && Clock::now() - s_test_latency_gpio_last_tp >= std::chrono::milliseconds(100))
-//         {
-//             s_test_latency_gpio_value = 0;
-//             gpioWrite(17, s_test_latency_gpio_value);
-//             s_test_latency_gpio_last_tp = Clock::now();
-//             //s_decoder.inject_test_data(s_test_latency_gpio_value);
-//         }
-// #endif        
 
         if (Clock::now() - last_stats_tp >= std::chrono::milliseconds(1000))
         {
@@ -355,108 +332,11 @@ int run()
             video_frame_count = 0;
         }
 
-        ///////////////////////////////
-
         Clock::time_point now = Clock::now();
         Clock::duration dt = now - last_tp;
         last_tp = now;
         io.DeltaTime = std::chrono::duration_cast<std::chrono::duration<float> >(dt).count();
 
-        ImGui::NewFrame();
-
-        ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImVec2(display_size.x, display_size.y));
-        ImGui::SetNextWindowBgAlpha(0);
-        ImGui::Begin("", nullptr, ImGuiWindowFlags_NoTitleBar | 
-                                    ImGuiWindowFlags_NoResize | 
-                                    ImGuiWindowFlags_NoMove | 
-                                    ImGuiWindowFlags_NoScrollbar | 
-                                    ImGuiWindowFlags_NoCollapse | 
-                                    ImGuiWindowFlags_NoSavedSettings | 
-                                    ImGuiWindowFlags_NoInputs);
-
-        ImVec2 resolution = s_decoder.get_video_resolution();
-        float ar = resolution.x / resolution.y;
-
-        ImageRotated((void*)(0x80000000),
-                     ImVec2(display_size.x / 2.f, display_size.y / 2.f),
-                     ImVec2(display_size.x / ar, display_size.y),
-                     0.f,
-                     0.f);
-
-        // ImDrawList* draw_list = ImGui::GetWindowDrawList();
-        // draw_list->AddRectFilled(ImVec2(0, 0), display_size, s_test_latency_gpio_value == 0 ? 0x0 : 0xFFFFFFFF, 0.0f);
-
-        //hud.draw();
-        ImGui::Begin("HAL");
-        {
-            {
-                int value = config.wifi_power;
-                ImGui::SliderInt("Power", &value, 2, 20);
-                config.wifi_power = value;
-            }
-            {
-                static int value = (int)config.wifi_rate;
-                ImGui::SliderInt("Rate", &value, (int)WIFI_Rate::RATE_B_2M_CCK, (int)WIFI_Rate::RATE_N_72M_MCS7_S);
-                config.wifi_rate = (WIFI_Rate)value;
-            }
-            {
-                int value = (int)config.camera.resolution;
-                ImGui::SliderInt("Resolution", &value, 0, 7);
-                config.camera.resolution = (Resolution)value;
-            }
-            {
-                int value = (int)config.camera.fps_limit;
-                ImGui::SliderInt("FPS", &value, 0, 100);
-                config.camera.fps_limit = (uint8_t)value;
-            }
-            {
-                int value = config.camera.quality;
-                ImGui::SliderInt("Quality", &value, 0, 63);
-                config.camera.quality = value;
-            }
-            {
-                int value = config.camera.gainceiling;
-                ImGui::SliderInt("Gain", &value, 0, 6);
-                config.camera.gainceiling = (uint8_t)value;
-            }
-            {
-                int value = config.camera.sharpness;
-                ImGui::SliderInt("Sharpness", &value, -1, 6);
-                config.camera.sharpness = (int8_t)value;
-            }
-            {
-                int value = config.camera.denoise;
-                ImGui::SliderInt("Denoise", &value, 0, 0xFF);
-                config.camera.denoise = (int8_t)value;
-            }
-            {
-                //ImGui::Checkbox("LC", &config.camera.lenc);
-                //ImGui::SameLine();
-                //ImGui::Checkbox("DCW", &config.camera.dcw);
-                //ImGui::SameLine();
-                //ImGui::Checkbox("H", &config.camera.hmirror);
-                //ImGui::SameLine();
-                //ImGui::Checkbox("V", &config.camera.vflip);
-                //ImGui::SameLine();
-                //ImGui::Checkbox("Raw", &config.camera.raw_gma);
-                //ImGui::SameLine();
-                ImGui::Checkbox("Record", &config.dvr_record);
-            }
-            if (ImGui::Button("Exit"))
-                abort();
-
-            ImGui::Text("%.3f ms/frame (%.1f FPS) %.1f VFPS", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate, video_fps);
-        }
-        ImGui::End();
-
-        ImGui::End();
-        ImGui::Render();
-
-        {
-            std::lock_guard<std::mutex> lg(s_ground2air_config_packet_mutex);
-            s_ground2air_config_packet = config;
-        }
     }
 
     return 0;
