@@ -302,12 +302,11 @@ int run()
 
     s_comms_thread = std::thread(&comms_thread_proc);
 
-    Ground2Air_Config_Packet config;
-    config.wifi_rate = WIFI_Rate::RATE_G_54M_ODFM;//RATE_G_18M_ODFM;
+    s_ground2air_config_packet.wifi_rate = WIFI_Rate::RATE_G_18M_ODFM;//RATE_G_18M_ODFM;
 
-    config.camera.resolution = Resolution::SVGA;
-    config.camera.fps_limit = 0;
-    config.camera.quality = 63;
+    s_ground2air_config_packet.camera.resolution = Resolution::QVGA;
+    s_ground2air_config_packet.camera.fps_limit = 0;
+    s_ground2air_config_packet.camera.quality = 8;
 
     size_t video_frame_count = 0;
 
