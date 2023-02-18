@@ -63,8 +63,8 @@
 //#include <glew.h>
 //#include <glext.h>
 //#include <glad/glad.h>
-#include <GLES3/gl3.h>
-#include <GLES3/gl3ext.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 
 #include "Log.h"
 #include "main.h"
@@ -105,7 +105,7 @@ bool    ImGui_ImplOpenGL3_Init(const char* glsl_version)
     // Store GLSL version string so we can refer to it later in case we recreate shaders. Note: GLSL version is NOT the same as GL version. Leave this to NULL if unsure.
 #ifndef RASPBERRY_PI
     if (glsl_version == NULL)
-        glsl_version = "#version 130";
+        glsl_version = "#version 100";
     IM_ASSERT((int)strlen(glsl_version) + 2 < IM_ARRAYSIZE(g_GlslVersionString));
     strcpy(g_GlslVersionString, glsl_version);
     strcat(g_GlslVersionString, "\n");

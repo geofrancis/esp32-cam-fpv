@@ -4,7 +4,7 @@ BIN := gs
 SRCS := src/main.cpp \
 	src/droid_sans_font.cpp \
 	src/HUD.cpp \
-	src/imgui_impl_opengl2.cpp \
+	src/imgui_impl_opengl3.cpp \
 	src/PI_HAL.cpp \
 	src/Comms.cpp \
 	src/Video_Decoder.cpp \
@@ -81,7 +81,7 @@ endif
 #LDFLAGS := -L/usr/lib -L=/opt/vc/lib -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lSDL2 -lGLESv2 -lturbojpeg -lmmal_core -lmmal_util -lmmal_vc_client -lvcos -lepoxy
 ifdef is_pi
 LDFLAGS := -L/usr/lib/aarch64-linux-gnu/  
-LDLIBS := -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lSDL2 -lturbojpeg -lpcap -lGLESv2 -lGL -ldl
+LDLIBS := -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lSDL2 -lturbojpeg -lpcap -lGLESv2 
 else
 LDFLAGS := -L/usr/lib/aarch64-linux-gnu/
 LDLIBS := -std=c++17 -pthread -lGLESv2 -lSDL2 -lfreetype -lpcap -lturbojpeg

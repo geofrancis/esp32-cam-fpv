@@ -409,9 +409,9 @@ bool PI_HAL::update_display()
     glClear(GL_COLOR_BUFFER_BIT);
 
 #ifdef USE_MANGA_SCREEN2
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData(), true);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData(),false);
 #else
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData(), false);
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData(),true);
 #endif
     
 #ifdef USE_SDL
