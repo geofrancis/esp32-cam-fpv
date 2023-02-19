@@ -287,7 +287,7 @@ int run()
 {
     HUD hud(*s_hal);
 
-
+    ImVec2 display_size = s_hal->get_display_size();
     ImGuiIO& io = ImGui::GetIO();
 
 
@@ -301,18 +301,97 @@ int run()
     fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
 
     s_comms_thread = std::thread(&comms_thread_proc);
+    Ground2Air_Config_Packet config;
+    config.wifi_rate = WIFI_Rate::RATE_G_18M_ODFM;//RATE_G_18M_ODFM;
 
-    s_ground2air_config_packet.wifi_rate = WIFI_Rate::RATE_G_18M_ODFM;//RATE_G_18M_ODFM;
-
-    s_ground2air_config_packet.camera.resolution = Resolution::QVGA;
-    s_ground2air_config_packet.camera.fps_limit = 0;
-    s_ground2air_config_packet.camera.quality = 8;
+    config.camera.resolution = Resolution::QVGA;
+    config.camera.fps_limit = 0;
+    config.camera.quality = 8;
 
     size_t video_frame_count = 0;
 
 
     Clock::time_point last_stats_tp = Clock::now();
     Clock::time_point last_tp = Clock::now();
+
+    auto f = [&config,&display_size]{
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(display_size);
+        ImGui::SetNextWindowBgAlpha(0);
+        ImGui::Begin("", nullptr, ImGuiWindowFlags_NoTitleBar | 
+                                ImGuiWindowFlags_NoResize | 
+                                ImGuiWindowFlags_NoMove | 
+                                ImGuiWindowFlags_NoScrollbar | 
+                                ImGuiWindowFlags_NoCollapse | 
+                                ImGuiWindowFlags_NoSavedSettings | 
+                                ImGuiWindowFlags_NoInputs);
+        ImGui::Begin("HAL");
+        {
+            {
+                int value = config.wifi_power;
+                ImGui::SliderInt("Power", &value, 2, 20);
+                config.wifi_power = value;
+            }
+            {
+                static int value = (int)config.wifi_rate;
+                ImGui::SliderInt("Rate", &value, (int)WIFI_Rate::RATE_B_2M_CCK, (int)WIFI_Rate::RATE_N_72M_MCS7_S);
+                config.wifi_rate = (WIFI_Rate)value;
+            }
+            {
+                int value = (int)config.camera.resolution;
+                ImGui::SliderInt("Resolution", &value, 0, 7);
+                config.camera.resolution = (Resolution)value;
+            }
+            {
+                int value = (int)config.camera.fps_limit;
+                ImGui::SliderInt("FPS", &value, 0, 100);
+                config.camera.fps_limit = (uint8_t)value;
+            }
+            {
+                int value = config.camera.quality;
+                ImGui::SliderInt("Quality", &value, 0, 63);
+                config.camera.quality = value;
+            }
+            {
+                int value = config.camera.gainceiling;
+                ImGui::SliderInt("Gain", &value, 0, 6);
+                config.camera.gainceiling = (uint8_t)value;
+            }
+            {
+                int value = config.camera.sharpness;
+                ImGui::SliderInt("Sharpness", &value, -1, 6);
+                config.camera.sharpness = (int8_t)value;
+            }
+            {
+                int value = config.camera.denoise;
+                ImGui::SliderInt("Denoise", &value, 0, 0xFF);
+                config.camera.denoise = (int8_t)value;
+            }
+            {
+                //ImGui::Checkbox("LC", &config.camera.lenc);
+                //ImGui::SameLine();
+                //ImGui::Checkbox("DCW", &config.camera.dcw);
+                //ImGui::SameLine();
+                //ImGui::Checkbox("H", &config.camera.hmirror);
+                //ImGui::SameLine();
+                //ImGui::Checkbox("V", &config.camera.vflip);
+                //ImGui::SameLine();
+                //ImGui::Checkbox("Raw", &config.camera.raw_gma);
+                //ImGui::SameLine();
+                ImGui::Checkbox("Record", &config.dvr_record);
+            }
+            if (ImGui::Button("Exit"))
+                abort();
+
+            ImGui::Text("%.3f ms/frame (%.1f FPS) %.1f VFPS", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate, video_fps);
+        }
+        ImGui::End();
+        ImGui::End();
+        std::lock_guard<std::mutex> lg(s_ground2air_config_packet_mutex);
+        s_ground2air_config_packet = config;
+    };
+
+    s_hal->add_render_callback(f);
     while (true)
     {
         s_decoder.unlock_output();

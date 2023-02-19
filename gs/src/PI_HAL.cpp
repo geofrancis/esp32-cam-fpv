@@ -301,14 +301,20 @@ bool PI_HAL::init_display_sdl()
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
-    m_impl->window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, window_flags);
+    SDL_DisplayMode mode;
+    int res = SDL_GetCurrentDisplayMode(0, &mode);
+    m_impl->width = mode.w;
+	m_impl->height = mode.h;
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(
+        SDL_WINDOW_OPENGL | 
+        SDL_WINDOW_SHOWN | 
+        SDL_WINDOW_RESIZABLE | 
+        SDL_WINDOW_ALLOW_HIGHDPI);
+    m_impl->window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_impl->width, m_impl->height, window_flags);
     SDL_GLContext gl_context = SDL_GL_CreateContext(m_impl->window);
     SDL_GL_MakeCurrent(m_impl->window, gl_context);
     SDL_GL_SetSwapInterval(1); // Enable vsync
 
-    m_impl->width = 1280;
-    m_impl->height = 720;
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -329,8 +335,8 @@ bool PI_HAL::init_display_sdl()
     style.ScrollbarSize = display_size.x / 80.f;
     style.TouchExtraPadding = ImVec2(style.ScrollbarSize * 2.f, style.ScrollbarSize * 2.f);
     //style.ItemSpacing = ImVec2(size.x / 200, size.x / 200);
-    //style.ItemInnerSpacing = ImVec2(style.ItemSpacing.x / 2, style.ItemSpacing.y / 2);
-    io.FontGlobalScale = 1.f;
+    style.ItemInnerSpacing = ImVec2(style.ItemSpacing.x / 2, style.ItemSpacing.y / 2);
+    io.FontGlobalScale = 2.f;
 
     
     return true;
@@ -401,23 +407,7 @@ void PI_HAL::shutdown_display()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-void test_callback(const ImDrawList* parent_list, const ImDrawCmd* pcmd){
-        const ImDrawIdx* idx_buffer_offset = 0;
-#define GLCHK             
-    GLCHK(glDisable(GL_BLEND));
-    GLCHK(glActiveTexture(GL_TEXTURE0));
-    GLCHK(glBindTexture(GL_TEXTURE_2D, g_VideoTextureChannels[0]));
-    GLCHK(glActiveTexture(GL_TEXTURE1));
-    GLCHK(glBindTexture(GL_TEXTURE_2D, g_VideoTextureChannels[1]));
-    GLCHK(glActiveTexture(GL_TEXTURE2));
-    GLCHK(glBindTexture(GL_TEXTURE_2D, g_VideoTextureChannels[2]));
 
-    GLCHK(glDrawElements(GL_TRIANGLES, (GLsizei)pcmd->ElemCount, sizeof(ImDrawIdx) == 2 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT, idx_buffer_offset));
-
-    GLCHK(glActiveTexture(GL_TEXTURE0));
-    GLCHK(glEnable(GL_BLEND));
-#undef GLCHK
-}
 bool PI_HAL::update_display()
 {
     SDL_Event event;
@@ -449,31 +439,10 @@ bool PI_HAL::update_display()
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 
-    // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-    if (show_demo_window)
-        ImGui::ShowDemoWindow(&show_demo_window);
-
-    // 2. Show a simple window that we create ourselves. We use a Begin/End pair to create a named window.
-    {
-        static float f = 0.0f;
-        static int counter = 0;
-
-        ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-        ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-
-
-        ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-
-        if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-            counter++;
-        ImGui::SameLine();
-        ImGui::Text("counter = %d", counter);
-
-        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-        ImGui::End();
+    for(auto &func:render_callbacks){
+        func();
     }
-    //ImGui::GetWindowDrawList()->AddCallback(test_callback,0);
+
     ImGui::GetWindowDrawList()->AddImage((ImTextureID)g_VideoTextureChannels[0],ImVec2(0,0),ImVec2(640,480));
 
     // Rendering

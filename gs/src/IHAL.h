@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imgui.h"
+#include <functional>
 
 class IHAL
 {
@@ -18,5 +19,6 @@ public:
     virtual ImVec2 get_display_size() const = 0;
     virtual void set_backlight(float brightness) = 0; //0..1
     virtual void set_video_channel(unsigned int channel, unsigned int id)=0;
+    virtual void add_render_callback(std::function<void()> func)=0;
     virtual bool process() = 0;
 };

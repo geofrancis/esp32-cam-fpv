@@ -2,6 +2,7 @@
 
 #include "IHAL.h"
 #include <memory>
+#include <functional>
 
 class PI_HAL : virtual public IHAL
 {
@@ -22,12 +23,18 @@ public:
     void set_video_channel(unsigned int channel, unsigned int id);
     bool process() override;
 
+    void add_render_callback(std::function<void()> func){
+        render_callbacks.push_back(func);
+    }
+
 private:
     struct Impl;
     std::unique_ptr<Impl> m_impl;
 
     bool init_pigpio();
     void shutdown_pigpio();
+
+    std::vector<std::function<void()>> render_callbacks;
 
     bool init_display_dispmanx();
     bool init_display_sdl();
