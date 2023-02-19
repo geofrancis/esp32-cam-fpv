@@ -253,10 +253,10 @@ bool PI_HAL::init_display_dispmanx()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-static GLuint       g_VideoTextureChannels[3];
-void PI_HAL::set_video_channel(unsigned int channel, unsigned int id)
+static GLuint       g_VideoTexture;
+void PI_HAL::set_video_channel(unsigned int id)
 {
-    g_VideoTextureChannels[channel] = id;   
+    g_VideoTexture = id;   
 }
 
 bool PI_HAL::init_display_sdl()
@@ -443,7 +443,7 @@ bool PI_HAL::update_display()
         func();
     }
 
-    ImGui::GetWindowDrawList()->AddImage((ImTextureID)g_VideoTextureChannels[0],ImVec2(0,0),ImVec2(640,480));
+    ImGui::GetWindowDrawList()->AddImage((ImTextureID)g_VideoTexture,ImVec2(0,0),ImVec2(640,480));
 
     // Rendering
     ImGui::Render();

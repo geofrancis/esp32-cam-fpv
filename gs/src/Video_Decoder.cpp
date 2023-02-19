@@ -36,11 +36,10 @@ struct Output
 {
     uint32_t pbo;
     size_t pbo_size = 0;
-    std::vector<uint32_t> textures;
+    uint32_t texture=0;
     uint32_t width = 0;
     uint32_t height = 0;
     std::vector<uint8_t> rgb_data;
-    std::array<std::vector<uint8_t>, 3> planes;
 };
 using Output_ptr = Pool<Output>::Ptr;
 
@@ -67,7 +66,7 @@ struct Video_Decoder::Impl
 };
 
 Video_Decoder::Video_Decoder()
-    : m_impl(new Impl)
+    : m_impl(new Impl),m_texture(0)
 {
 }
 
@@ -82,11 +81,8 @@ Video_Decoder::~Video_Decoder()
     for (auto& t: m_impl->threads)
         if (t.joinable())
             t.join();
-
-    for (auto& t: m_textures)
-    {
-        if (t != 0)
-            glDeleteTextures(1, &t);
+    if(m_texture != 0){
+        glDeleteTextures(1,&m_texture);
     }
 }
 
@@ -116,9 +112,9 @@ bool Video_Decoder::init(IHAL& hal)
     return true;
 }
 
-uint32_t Video_Decoder::get_video_texture_id(size_t channel) const
+uint32_t Video_Decoder::get_video_texture_id() const
 {
-    return m_textures[channel];
+    return m_texture;
 }
 ImVec2 Video_Decoder::get_video_resolution() const
 {
@@ -244,17 +240,10 @@ void Video_Decoder::decoder_thread_proc(size_t thread_index)
             continue;
         }
 
-        std::array<uint8_t*, 3> planesPtr;
-
         Output_ptr output = m_impl->output_pool.acquire();
 
         output->rgb_data.resize(tjBufSize(width,height,inSubsamp));
 
-        // for (size_t i = 0; i < output->planes.size(); i++)
-        // {
-        //     output->planes[i].resize(tjPlaneSizeYUV(i, width, 0, height, inSubsamp));
-        //     planesPtr[i] = output->planes[i].data();
-        // }
         output->width = width;
         output->height = height;
 
@@ -295,40 +284,22 @@ size_t Video_Decoder::lock_output()
     Output& output = *m_impl->locked_outputs.back();
 
     //LOGI("* Rcv buffer {} at {}", (size_t)&output, std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - s_start).count());
-    
-    if (output.textures.empty())
-    {
-        //m_hal->lock_main_context();
+    if(output.texture == 0){
         GLCHK(glGenBuffers(1, &output.pbo));
-
-        output.textures.resize(3);
-        GLCHK(glGenTextures(output.textures.size(), output.textures.data()));
-        for (auto& t: output.textures)
-        {
-            GLCHK(glBindTexture(GL_TEXTURE_2D, t));
-            GLCHK(glPixelStorei(GL_UNPACK_ALIGNMENT, 1));
-            GLCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
-            GLCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-            GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-            GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-            LOGI("Texture: {}", t);
-        }
-        //m_hal->unlock_main_context();
+        GLCHK(glGenTextures(1, &output.texture));
+        GLCHK(glBindTexture(GL_TEXTURE_2D, output.texture));
+        GLCHK(glPixelStorei(GL_UNPACK_ALIGNMENT, 1));
+        GLCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
+        GLCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
+        GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+        GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+        LOGI("Texture: {}", output.texture);
     }
 
     //calculate total size
     GLCHK(glBindBuffer(GL_PIXEL_UNPACK_BUFFER, output.pbo));
     size_t pbo_size = output.rgb_data.size();
-    // for (size_t i = 0; i < output.textures.size(); i++)
-    // {
-    //     pbo_size += output.planes[i].size();
-    //     size_t align = pbo_size & 0xF;
-    //     if (align > 0)
-    //         pbo_size += 0x10 - align;
-    // }
 
-    //allocate memory for the pbo
-    //if (output.pbo_size != pbo_size)
     {
         GLCHK(glBufferData(GL_PIXEL_UNPACK_BUFFER, pbo_size, nullptr, GL_STREAM_DRAW));
         output.pbo_size = pbo_size;
@@ -340,42 +311,15 @@ size_t Video_Decoder::lock_output()
     {
         //copy the page into the pbo, aligned to 16 bytes
         memcpy(ptr,output.rgb_data.data(),output.rgb_data.size());
-        // size_t offset = 0;
-        // for (size_t i = 0; i < output.textures.size(); i++)
-        // {
-        //     memcpy(ptr + offset, output.planes[i].data(), output.planes[i].size());
-        //     offset += output.planes[i].size();
-        //     size_t align = offset & 0xF;
-        //     if (align > 0)
-        //         offset += 0x10 - align;
-        // }
         glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER); // release the mapped buffer
     }
 
-    GLCHK(glBindTexture(GL_TEXTURE_2D, output.textures[0]));
+    GLCHK(glBindTexture(GL_TEXTURE_2D, output.texture));
     GLCHK(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, output.width, output.height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0));
-    // size_t offset = 0;
-    // for (size_t i = 0; i < output.textures.size(); i++)
-    // {
-    //     GLCHK(glBindTexture(GL_TEXTURE_2D, output.textures[i]));
-    //     uint32_t width = i == 0 ? output.width : output.width / 2;
-    //     uint32_t height = output.height;
-    //     GLCHK(glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0, GL_RED, GL_UNSIGNED_BYTE, (void*)offset));
-    //     offset += output.planes[i].size();
-    //     size_t align = offset & 0xF;
-    //     if (align > 0)
-    //         offset += 0x10 - align;
-    // }
 
     GLCHK(glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0));
-    //GLCHK(glFlush()); //to publish the changes
-    //GLCHK(glFinish()); //to publish the changes
 
-    //GLsync fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-    //glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000000ULL);
-
-//*/    
-    std::copy(output.textures.begin(), output.textures.end(), m_textures.begin());
+    m_texture = output.texture;
     m_resolution = ImVec2((float)output.width, (float)output.height);
 
     return count;

@@ -17,7 +17,7 @@ public:
     bool init(IHAL& hal);
 
     size_t lock_output();
-    uint32_t get_video_texture_id(size_t component) const;;
+    uint32_t get_video_texture_id() const;
     ImVec2 get_video_resolution() const;
     bool unlock_output();
 
@@ -30,6 +30,6 @@ private:
     IHAL* m_hal = nullptr;
     bool m_exit = false;
     ImVec2 m_resolution;
-    std::array<uint32_t, 3> m_textures;
+    uint32_t m_texture;
     std::unique_ptr<Impl> m_impl;
 };

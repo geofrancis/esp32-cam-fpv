@@ -397,9 +397,7 @@ int run()
         s_decoder.unlock_output();
         size_t count = s_decoder.lock_output();
         video_frame_count += count;
-        for (size_t i = 0; i < 3; i++)
-            s_hal->set_video_channel(i,s_decoder.get_video_texture_id(i));
-           // ImGui_SetVideoTextureChannel(i, s_decoder.get_video_texture_id(i));
+        s_hal->set_video_channel(s_decoder.get_video_texture_id());
 
         s_hal->process();
 
