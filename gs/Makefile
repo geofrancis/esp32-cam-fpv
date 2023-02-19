@@ -54,53 +54,30 @@ INCLUDE  := -Isrc \
 	-I$(IMGUI_DIR) \
 	-I$(IMGUI_DIR)/backends
 
-# C flags
-CFLAGS := -std=c11
-
 # C++ flags
-CXXFLAGS := -std=c++17  `sdl2-config --cflags`
+CXXFLAGS := -std=c++17  `sdl2-config --cflags` -O3 -DNDEBUG -ffast-math -funroll-loops -Wall $(INCLUDE)
 CXXFLAGS += -DIMGUI_IMPL_OPENGL_ES2
+CFLAGS = $(CXXFLAGS)
 
-# C/C++ flags
-is_pi = 
-ifeq ($(shell arch), aarch64)
-	is_pi = yes
-endif
-ifeq ($(shell arch), armv7l)
-	is_pi = yes
-endif
-
-ifdef is_pi
-CPPFLAGS := -O3 -DNDEBUG -ffast-math -funroll-loops   -Wall  $(INCLUDE)
-else
-CPPFLAGS := -O3 -DNDEBUG -ffast-math -funroll-loops -Wall $(INCLUDE)
-endif
 #CPPFLAGS := -g -Wall -DRASPBERRY_PI $(INCLUDE)
 
 # linker flags
 #LDFLAGS := -L/usr/lib -L=/opt/vc/lib -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lmmal_core -lmmal_util -lmmal_vc_client -lvcos -lbcm_host -lbrcmGLESv2 -lbrcmEGL -lts
 #LDFLAGS := -L/usr/lib -L=/opt/vc/lib -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lSDL2 -lGLESv2 -lturbojpeg -lmmal_core -lmmal_util -lmmal_vc_client -lvcos -lepoxy
-ifdef is_pi
 LDFLAGS := -L/usr/lib/aarch64-linux-gnu/  
 LDLIBS := -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lSDL2 -lturbojpeg -lpcap -lGLESv2 
-else
-LDFLAGS := -L/usr/lib/aarch64-linux-gnu/
-LDLIBS := -std=c++17 -pthread -lGLESv2 -lSDL2 -lfreetype -lpcap -lturbojpeg
-endif
 
 # flags required for dependency generation; passed to compilers
 DEPFLAGS = -MT $@ -MD -MP -MF $(DEPDIR)/$*.Td
 
 # compile C source files
-COMPILE.c = $(CC) $(DEPFLAGS) $(CFLAGS) $(CPPFLAGS) -c -o $@
+COMPILE.c = $(CC) $(DEPFLAGS) $(CFLAGS)  -c -o $@
 # compile C++ source files
-COMPILE.cc = $(CXX) $(DEPFLAGS) $(CXXFLAGS) $(CPPFLAGS) -c -o $@
+COMPILE.cc = $(CXX) $(DEPFLAGS) $(CXXFLAGS)  -c -o $@
 # link object files to binary
-ifdef is_pi
+
 LINK.o = $(LD) $(LDFLAGS) $(LDLIBS) -o $@
-else
-LINK.o = $(LD) $(LDFLAGS) -o $@ 
-endif
+
 
 # precompile step
 PRECOMPILE =
