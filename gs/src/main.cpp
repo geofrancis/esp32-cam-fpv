@@ -301,7 +301,7 @@ int run()
     fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
 
     s_comms_thread = std::thread(&comms_thread_proc);
-    Ground2Air_Config_Packet config;
+    Ground2Air_Config_Packet config=s_ground2air_config_packet;
     config.wifi_rate = WIFI_Rate::RATE_G_18M_ODFM;//RATE_G_18M_ODFM;
 
     config.camera.resolution = Resolution::QVGA;
@@ -323,7 +323,6 @@ int run()
                                 ImGuiWindowFlags_NoMove | 
                                 ImGuiWindowFlags_NoScrollbar | 
                                 ImGuiWindowFlags_NoCollapse | 
-                                ImGuiWindowFlags_NoSavedSettings | 
                                 ImGuiWindowFlags_NoInputs);
         ImGui::Begin("HAL");
         {
@@ -420,6 +419,8 @@ int run()
 
 int main(int argc, const char* argv[])
 {
+    int argv_handle_state=0;
+
     init_crc8_table();
 
     s_hal.reset(new PI_HAL());
@@ -440,6 +441,30 @@ int main(int argc, const char* argv[])
     tx_descriptor.coding_n = 6;
     tx_descriptor.mtu = GROUND2AIR_DATA_MAX_SIZE;
     tx_descriptor.interface = "wlx00127b22ac39";
+
+    for(int i=1;i<argc;++i){
+        auto temp = std::string(argv[i]);
+        auto next = i!=argc-1? std::string(argv[i+1]):std::string("");
+        if(temp=="--tx"){
+           tx_descriptor.interface = next; 
+           i++;
+        }else if(temp=="-k"){
+           rx_descriptor.coding_k = std::stoi(next);
+           s_ground2air_config_packet.fec_codec_k =  std::stoi(next);
+           i++;
+           LOGI("set rx fec_k to {}",rx_descriptor.coding_k);
+        }else if(temp=="-n"){
+           rx_descriptor.coding_n = std::stoi(next);
+           s_ground2air_config_packet.fec_codec_n =  std::stoi(next);
+           i++;
+           LOGI("set rx fec_n to {}",rx_descriptor.coding_n);
+        }else if(temp=="--rx"){
+            rx_descriptor.interfaces.clear();
+        }else{
+            rx_descriptor.interfaces.push_back(temp);
+        }
+    }
+
     if (!s_comms.init(rx_descriptor, tx_descriptor))
         return -1;
 
