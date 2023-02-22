@@ -305,6 +305,8 @@ bool PI_HAL::init_display_sdl()
     int res = SDL_GetCurrentDisplayMode(0, &mode);
     m_impl->width = mode.w;
 	m_impl->height = mode.h;
+
+    printf("width:%d height:%d\n",m_impl->width,m_impl->height);
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(
         SDL_WINDOW_OPENGL | 
         SDL_WINDOW_SHOWN | 
@@ -424,8 +426,11 @@ bool PI_HAL::update_display()
         case SDL_FINGERUP:
         {
             SDL_TouchFingerEvent& ev = *(SDL_TouchFingerEvent*)&event;
-            io.MousePos = ImVec2(ev.x * m_impl->width, ev.y * m_impl->height);
-            io.MouseDown[0] = event.type == SDL_FINGERUP ? false : true;
+            //io.MousePos = ImVec2(ev.x * m_impl->width, ev.y * m_impl->height);
+            //io.MouseDown[0] = event.type == SDL_FINGERUP ? false : true;
+            if(event.type == SDL_FINGERMOTION || event.type == SDL_FINGERDOWN ){
+                io.MouseDown[0] = true;
+            }
         }
         break;
         case SDL_QUIT:
@@ -439,12 +444,22 @@ bool PI_HAL::update_display()
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(get_display_size());
+    ImGui::SetNextWindowBgAlpha(0);
+    ImGui::Begin("", nullptr, ImGuiWindowFlags_NoTitleBar | 
+                            ImGuiWindowFlags_NoResize | 
+                            ImGuiWindowFlags_NoMove | 
+                            ImGuiWindowFlags_NoScrollbar | 
+                            ImGuiWindowFlags_NoCollapse | 
+                            ImGuiWindowFlags_NoInputs);
     for(auto &func:render_callbacks){
         func();
     }
 
-    ImGui::GetWindowDrawList()->AddImage((ImTextureID)g_VideoTexture,ImVec2(0,0),ImVec2(640,480));
+    ImGui::GetWindowDrawList()->AddImage((ImTextureID)g_VideoTexture,ImVec2(0,0),ImVec2(m_impl->width,m_impl->height));
 
+    ImGui::End();
     // Rendering
     ImGui::Render();
     glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);

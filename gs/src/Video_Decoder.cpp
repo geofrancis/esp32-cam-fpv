@@ -40,6 +40,13 @@ struct Output
     uint32_t width = 0;
     uint32_t height = 0;
     std::vector<uint8_t> rgb_data;
+
+    ~Output(){
+        if(texture != 0){
+            glDeleteTextures(1,&texture);
+            LOGI("die texture:{}",texture);
+        }
+    }
 };
 using Output_ptr = Pool<Output>::Ptr;
 

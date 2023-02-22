@@ -287,7 +287,6 @@ int run()
 {
     HUD hud(*s_hal);
 
-    ImVec2 display_size = s_hal->get_display_size();
     ImGuiIO& io = ImGui::GetIO();
 
 
@@ -314,16 +313,8 @@ int run()
     Clock::time_point last_stats_tp = Clock::now();
     Clock::time_point last_tp = Clock::now();
 
-    auto f = [&config,&display_size]{
-        ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(display_size);
-        ImGui::SetNextWindowBgAlpha(0);
-        ImGui::Begin("", nullptr, ImGuiWindowFlags_NoTitleBar | 
-                                ImGuiWindowFlags_NoResize | 
-                                ImGuiWindowFlags_NoMove | 
-                                ImGuiWindowFlags_NoScrollbar | 
-                                ImGuiWindowFlags_NoCollapse | 
-                                ImGuiWindowFlags_NoInputs);
+    auto f = [&config]{
+
         ImGui::Begin("HAL");
         {
             {
@@ -385,7 +376,7 @@ int run()
             ImGui::Text("%.3f ms/frame (%.1f FPS) %.1f VFPS", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate, video_fps);
         }
         ImGui::End();
-        ImGui::End();
+
         std::lock_guard<std::mutex> lg(s_ground2air_config_packet_mutex);
         s_ground2air_config_packet = config;
     };
@@ -470,7 +461,7 @@ int main(int argc, const char* argv[])
 
     for (const auto& itf: rx_descriptor.interfaces)
     {
-        system(fmt::format("iwconfig {} channel 11", itf).c_str());
+        system(fmt::format("iwconfig {} channel 13", itf).c_str());
     }
 
     int result = run();
