@@ -64,7 +64,7 @@ CFLAGS = $(CXXFLAGS)
 # linker flags
 #LDFLAGS := -L/usr/lib -L=/opt/vc/lib -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lmmal_core -lmmal_util -lmmal_vc_client -lvcos -lbcm_host -lbrcmGLESv2 -lbrcmEGL -lts
 #LDFLAGS := -L/usr/lib -L=/opt/vc/lib -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lSDL2 -lGLESv2 -lturbojpeg -lmmal_core -lmmal_util -lmmal_vc_client -lvcos -lepoxy
-LDFLAGS := -L/usr/lib/aarch64-linux-gnu/  
+LDFLAGS := -L/usr/lib/aarch64-linux-gnu/ -L/usr/lib/ -L/opt/vc/lib/ 
 LDLIBS := -lstdc++ -lm -lpthread -lz -lrt -lfreetype -lSDL2 -lturbojpeg -lpcap -lGLESv2 
 
 # flags required for dependency generation; passed to compilers
