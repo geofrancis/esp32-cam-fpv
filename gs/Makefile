@@ -12,6 +12,8 @@ SRCS := src/main.cpp \
 	../components/common/fec.cpp \
 	src/fmt/format.cc \
 	src/fmt/os.cc \
+	src/socket.cpp \
+	
 
 SRCS += $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp
 SRCS += $(IMGUI_DIR)/backends/imgui_impl_sdl2.cpp $(IMGUI_DIR)/backends/imgui_impl_opengl3.cpp

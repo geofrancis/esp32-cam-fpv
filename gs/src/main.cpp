@@ -23,6 +23,8 @@
 #include "imgui_impl_opengl3.h"
 #include "main.h"
 
+#include "socket.h"
+
 #ifdef TEST_LATENCY
 extern "C"
 {
@@ -86,6 +88,11 @@ static void comms_thread_proc()
     };
 
     RX_Data rx_data;
+
+    int socket_fd=0;
+
+    socket_fd=udp_socket_init(std::string("127.0.0.1"),5600);
+
 
     while (true)
     {
@@ -239,6 +246,7 @@ static void comms_thread_proc()
                 {
                     //LOGI("Received frame {}, {}, size {}", video_frame_index, video_next_part_index, video_frame.size());
                     s_decoder.decode_data(video_frame.data(), video_frame.size());
+                    send_data_to_udp(socket_fd,video_frame.data(),video_frame.size());
                     video_next_part_index = 0;
                     video_frame.clear();
                 }
