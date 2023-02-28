@@ -3,6 +3,11 @@
 #include <algorithm>
 #include "esp_task_wdt.h"
 #include "safe_printf.h"
+#include "esp_log.h"
+
+#include "packets.h"
+#include "crc.h"
+
 
 static constexpr unsigned BLOCK_NUMS[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
                                            10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
@@ -14,10 +19,10 @@ const size_t Fec_Codec::PACKET_OVERHEAD;
 
 constexpr size_t STACK_SIZE = 4096;
 
-#define ENCODER_LOG(...)
+#define ENCODER_LOG(...) //ESP_LOGE(TAG,__VA_ARGS__)
 //#define ENCODER_LOG(...) SAFE_PRINTF(__VA_ARGS__)
 
-#define DECODER_LOG(...)
+#define DECODER_LOG(...) //ESP_LOGE(TAG,__VA_ARGS__)
 //#define DECODER_LOG(...) SAFE_PRINTF(__VA_ARGS__)
 
 #pragma pack(push, 1)
@@ -33,26 +38,47 @@ struct Packet_Header
 #pragma pack(pop)
 
 static_assert(Fec_Codec::PACKET_OVERHEAD == sizeof(Packet_Header), "Check the PACKET_OVERHEAD size");
+////////////////////////////////////////////////////////////////////////////////////////////
+Fec_Codec s_fec_encoder;
+
+Fec_Codec s_fec_decoder;
+
+static const char* TAG = "fec";
+
+void init_fec_codec(Fec_Codec & codec,uint8_t k,uint8_t n,uint16_t mtu,bool is_encoder){
+
+        Fec_Codec::Descriptor descriptor;
+        descriptor.coding_k = k;
+        descriptor.coding_n = n;
+        descriptor.mtu = mtu;
+        descriptor.core = Fec_Codec::Core::Any;
+        descriptor.priority = 1;
+        codec.lock();
+        if(!codec.init(descriptor,is_encoder)){
+            ESP_LOGE(TAG, "Failed to init fec codec");
+        }
+        codec.unlock();
+}
+
+void setup_fec(uint8_t k,uint8_t n,uint16_t mtu,void (*fec_encoded_cb)(const void *, size_t ), void (*fec_decoded_cb)(const void *, size_t )){
+    init_crc8_table();
+    init_fec();
+
+    init_fec_codec(s_fec_encoder,k,n,mtu,true);
+    init_fec_codec(s_fec_decoder,2,6,GROUND2AIR_DATA_MAX_SIZE,false);
+    s_fec_encoder.set_data_encoded_cb(fec_encoded_cb);
+    s_fec_decoder.set_data_decoded_cb(fec_decoded_cb);
+
+    ESP_LOGI(TAG,"MEMORY after fec:");
+    heap_caps_print_heap_info(MALLOC_CAP_8BIT);
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 
 Fec_Codec::Fec_Codec()
 {
-
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////
-
-bool Fec_Codec::init_encoder(const Descriptor& descriptor)
-{
-    return init(descriptor, true);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////
-
-bool Fec_Codec::init_decoder(const Descriptor& descriptor)
-{
-    return init(descriptor, false);
+    fec_encoder_mux = xSemaphoreCreateBinary();
+    xSemaphoreGive(fec_encoder_mux);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -105,18 +131,22 @@ IRAM_ATTR bool Fec_Codec::is_initialized() const
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-void Fec_Codec::set_data_encoded_cb(void (*cb)(void* data, size_t size))
+void Fec_Codec::set_data_encoded_cb(void (*cb)(const void* data, size_t size))
 {
     assert(m_is_encoder);
+    lock();
     m_encoder.cb = cb;
+    unlock();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-void Fec_Codec::set_data_decoded_cb(void (*cb)(void* data, size_t size))
+void Fec_Codec::set_data_decoded_cb(void (*cb)(const void* data, size_t size))
 {
     assert(!m_is_encoder);
+    lock();
     m_decoder.cb = cb;
+    unlock();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -371,6 +401,7 @@ IRAM_ATTR void Fec_Codec::encoder_task_proc()
         //esp_task_wdt_reset();
 
         {
+            
             ENCODER_LOG("1: Waiting for packet: %d\n", uxQueueSpacesAvailable(m_encoder.packet_queue));
 
             Encoder::Packet packet;

@@ -11,6 +11,9 @@
 #include "freertos/semphr.h"
 #include "fec.h"
 
+
+
+void setup_fec(uint8_t k,uint8_t n,uint16_t mtu,void (*fec_encoded_cb)(const void *, size_t ), void (*fec_decoded_cb)(const void *, size_t ));
 class Fec_Codec
 {
 public:
@@ -36,8 +39,9 @@ public:
         uint8_t priority = configMAX_PRIORITIES - 1;
     };
 
-    bool init_encoder(const Descriptor& descriptor);
-    bool init_decoder(const Descriptor& descriptor);
+    SemaphoreHandle_t fec_encoder_mux;
+    BaseType_t lock(){return xSemaphoreTake(fec_encoder_mux,portMAX_DELAY);}
+    BaseType_t unlock(){return xSemaphoreGive(fec_encoder_mux);}
     IRAM_ATTR bool is_initialized() const;
 
     const Descriptor& get_descriptor() const;
@@ -45,7 +49,7 @@ public:
 
     //Callback for when an encoded packet is available
     //NOTE: this is called form another thread!!!
-    void set_data_encoded_cb(void (*cb)(void* data, size_t size));
+    void set_data_encoded_cb(void (*cb)(const void* data, size_t size));
 
     //Add here data that will be encoded.
     //Size dosn't have to be a full packet. Can be anything > 0, even bigger than a packet
@@ -57,15 +61,16 @@ public:
 
     //Callback for when a decoded packet is ready.
     //NOTE: this is called form another thread!!!
-    void set_data_decoded_cb(void (*cb)(void* data, size_t size));
+    void set_data_decoded_cb(void (*cb)(const void* data, size_t size));
 
     //Add here data that will be decoded.
     //Size dosn't have to be a full packet. Can be anything > 0, even bigger than a packet
     //NOTE: This has to be called from a single thread only (any thread, as long as it's just one)
     IRAM_ATTR bool decode_data(const void* data, size_t size, bool block);
 
-private:
     bool init(const Descriptor& descriptor, bool is_encoder);
+private:
+
     void stop_tasks();
     bool start_tasks();
 
@@ -107,7 +112,7 @@ private:
 
         Packet crt_packet;
 
-        void (*cb)(void* data, size_t size);
+        void (*cb)(const void* data, size_t size);
     } m_encoder;
 
     void seal_packet(Encoder::Packet& packet, uint32_t block_index, uint8_t packet_index);
@@ -139,7 +144,7 @@ private:
 
         Packet crt_packet;
 
-        void (*cb)(void* data, size_t size);
+        void (*cb)(const void* data, size_t size);
     } m_decoder;
 
     Encoder::Packet* pop_encoder_packet_from_pool();
@@ -147,3 +152,10 @@ private:
     Decoder::Packet* pop_decoder_packet_from_pool();
     void push_decoder_packet_to_pool(Decoder::Packet* packet);
 };
+
+
+extern Fec_Codec s_fec_encoder;
+
+extern Fec_Codec s_fec_decoder;
+
+void init_fec_codec(Fec_Codec & codec,uint8_t k,uint8_t n,uint16_t mtu,bool is_encoder);

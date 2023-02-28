@@ -14,6 +14,22 @@
 
 /////////////////////////////////////////////////////////////////////////
 
+IRAM_ATTR bool start_writing_wlan_outgoing_packet(Wlan_Outgoing_Packet& packet, size_t size);
+IRAM_ATTR void end_writing_wlan_outgoing_packet(Wlan_Outgoing_Packet& packet);
+IRAM_ATTR void cancel_writing_wlan_outgoing_packet(Wlan_Outgoing_Packet& packet);
+IRAM_ATTR bool start_reading_wlan_outgoing_packet(Wlan_Outgoing_Packet& packet);
+IRAM_ATTR void end_reading_wlan_outgoing_packet(Wlan_Outgoing_Packet& packet);
+IRAM_ATTR void cancel_reading_wlan_outgoing_packet(Wlan_Outgoing_Packet& packet);
+
+
+IRAM_ATTR bool start_writing_wlan_incoming_packet(Wlan_Incoming_Packet& packet, size_t size);
+IRAM_ATTR void end_writing_wlan_incoming_packet(Wlan_Incoming_Packet& packet);
+IRAM_ATTR void cancel_writing_wlan_incoming_packet(Wlan_Incoming_Packet& packet);
+IRAM_ATTR bool start_reading_wlan_incoming_packet(Wlan_Incoming_Packet& packet);
+IRAM_ATTR void end_reading_wlan_incoming_packet(Wlan_Incoming_Packet& packet);
+IRAM_ATTR void cancel_reading_wlan_incoming_packet(Wlan_Incoming_Packet& packet);
+
+
 struct Queue
 {
   void init(uint8_t* buffer, size_t size)
@@ -161,5 +177,8 @@ private:
   size_t m_read_end = 0;
   size_t m_count = 0;
 };
+
+extern Queue s_wlan_incoming_queue;
+extern Queue s_wlan_outgoing_queue;
 
 ////////////////////////////////////////////////////////////////////////////////////
