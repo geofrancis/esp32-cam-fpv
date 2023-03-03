@@ -1,17 +1,16 @@
-# esp32-cam-fpv
-esp32 cam digital, low latency FPV
+# ESP-VTX
+Digital,low latency video transmitter base on ESP32
+origin project:https://github.com/jeanlemotan/esp32-cam-fpv
 
-This project uses a modified esp-camera component running on an AI Thinker board to send low-latency mjpeg video to a Raspberry PI base station with 1-2 wifi cards using packet injection and monitor mode.
-
-It uses FEC encoding (4/7 currently configured) with 1400 byte packets and it achieves quite good performance:
-* Up to 12Mbps video rate.
-* More than 90 FPS at 400x296 or lower with 20-50 ms latency.
-* 34-44 FPS at 800x600 or 640x480 with 50-80 ms latency.
+## Features:
+It uses FEC encoding (2/3 currently configured) with 1400 byte packets and it achieves quite good performance:
+* Up to 54Mbps video rate.
+* More than 80 FPS at 320x240 or lower with 20-50 ms latency.
+* 30+ FPS at 800x600 or 640x480 with 50-80 ms latency.
 * 12 FPS at 1024x768 with >100 ms latency.
-* Air unit weighs in at 18g with camera, antenna and a 3D printed case.
+* run at any ESP-cam boards(like AI Thinker etc.) with OV2640.
 
-It's based on an Ai Thinker board with an OV2640 camera board and the esp-camera component.
-
+## Theory
 The data is received from the camera module as JPEG ar 20MHz I2S clock and passed directly to the wifi module and written to the SD card if the DVR is enabled.
 The ESP camera component was modified to send the data as it's received from the DMA instead of frame-by-frame basis. This decreases latency quite significantly (10-20 ms) and reduces the need to allocate full frames in PSRAM.
 
@@ -19,7 +18,6 @@ The wifi data is send using packet injection with configurable rate - from 2 MB 
 
 The air unit can also record the video straight from the camera to a sd card. The format is a rudimentary MJPEG without any header so when playing back the FPS will be whatever your player will decide.\
 There is significant buffering when writing to SD (3MB at the moment) to work around the very regular slowdowns of sd cards.
-
 
 
 The receiver is a Raspberry PI 4 with 2 wifi adapters in monitor mode (TL-WN722N). The adapters work as diversity receivers and the data is reconstructed from the FEC packets.
