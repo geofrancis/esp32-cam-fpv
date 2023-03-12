@@ -62,6 +62,7 @@ static uint32_t s_test_latency_gpio_value = 0;
 static Clock::time_point s_test_latency_gpio_last_tp = Clock::now();
 #endif
 float video_fps = 0;
+int socket_fd=0;
 static void comms_thread_proc()
 {
     Clock::time_point last_stats_tp = Clock::now();
@@ -89,9 +90,8 @@ static void comms_thread_proc()
 
     RX_Data rx_data;
 
-    int socket_fd=0;
 
-    socket_fd=udp_socket_init(std::string("127.0.0.1"),5600);
+    
 
 
     while (true)
@@ -246,7 +246,9 @@ static void comms_thread_proc()
                 {
                     //LOGI("Received frame {}, {}, size {}", video_frame_index, video_next_part_index, video_frame.size());
                     s_decoder.decode_data(video_frame.data(), video_frame.size());
-                    send_data_to_udp(socket_fd,video_frame.data(),video_frame.size());
+                    if(socket_fd>0){
+                        send_data_to_udp(socket_fd,video_frame.data(),video_frame.size());
+                    }
                     video_next_part_index = 0;
                     video_frame.clear();
                 }
@@ -444,19 +446,29 @@ int main(int argc, const char* argv[])
     for(int i=1;i<argc;++i){
         auto temp = std::string(argv[i]);
         auto next = i!=argc-1? std::string(argv[i+1]):std::string("");
+        auto check_argval = [&next](std::string arg_name){
+            if(next==""){throw std::string("please input correct ")+arg_name;}
+        };
         if(temp=="--tx"){
-           tx_descriptor.interface = next; 
-           i++;
+            check_argval("tx");
+            tx_descriptor.interface = next; 
+            i++;
+        }else if(temp=="-p"){
+            check_argval("port");
+            socket_fd=udp_socket_init(std::string("127.0.0.1"),std::stoi(next));
+            i++;
         }else if(temp=="-k"){
-           rx_descriptor.coding_k = std::stoi(next);
-           s_ground2air_config_packet.fec_codec_k =  std::stoi(next);
-           i++;
-           LOGI("set rx fec_k to {}",rx_descriptor.coding_k);
+            check_argval("k");
+            rx_descriptor.coding_k = std::stoi(next);
+            s_ground2air_config_packet.fec_codec_k =  std::stoi(next);
+            i++;
+            LOGI("set rx fec_k to {}",rx_descriptor.coding_k);
         }else if(temp=="-n"){
-           rx_descriptor.coding_n = std::stoi(next);
-           s_ground2air_config_packet.fec_codec_n =  std::stoi(next);
-           i++;
-           LOGI("set rx fec_n to {}",rx_descriptor.coding_n);
+            check_argval("n");
+            rx_descriptor.coding_n = std::stoi(next);
+            s_ground2air_config_packet.fec_codec_n =  std::stoi(next);
+            i++;
+            LOGI("set rx fec_n to {}",rx_descriptor.coding_n);
         }else if(temp=="--rx"){
             rx_descriptor.interfaces.clear();
         }else{
@@ -469,7 +481,7 @@ int main(int argc, const char* argv[])
 
     for (const auto& itf: rx_descriptor.interfaces)
     {
-        system(fmt::format("iwconfig {} channel 13", itf).c_str());
+        system(fmt::format("iwconfig {} channel 4", itf).c_str());
     }
 
     int result = run();
