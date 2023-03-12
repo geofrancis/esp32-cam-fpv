@@ -61,8 +61,14 @@ static Ground2Air_Config_Packet s_ground2air_config_packet;
 static uint32_t s_test_latency_gpio_value = 0;
 static Clock::time_point s_test_latency_gpio_last_tp = Clock::now();
 #endif
+
+struct{
+    int socket_fd;
+    bool record;
+    FILE * record_file=nullptr;
+    std::mutex record_mutex;
+}s_groundstation_config;
 float video_fps = 0;
-int socket_fd=0;
 static void comms_thread_proc()
 {
     Clock::time_point last_stats_tp = Clock::now();
@@ -246,8 +252,12 @@ static void comms_thread_proc()
                 {
                     //LOGI("Received frame {}, {}, size {}", video_frame_index, video_next_part_index, video_frame.size());
                     s_decoder.decode_data(video_frame.data(), video_frame.size());
-                    if(socket_fd>0){
-                        send_data_to_udp(socket_fd,video_frame.data(),video_frame.size());
+                    if(s_groundstation_config.record){
+                        std::lock_guard<std::mutex> lg(s_groundstation_config.record_mutex);
+                        fwrite(video_frame.data(),video_frame.size(),1,s_groundstation_config.record_file);
+                    }
+                    if(s_groundstation_config.socket_fd>0){
+                        send_data_to_udp(s_groundstation_config.socket_fd,video_frame.data(),video_frame.size());
                     }
                     video_next_part_index = 0;
                     video_frame.clear();
@@ -378,10 +388,33 @@ int run()
                 //ImGui::SameLine();
                 //ImGui::Checkbox("Raw", &config.camera.raw_gma);
                 //ImGui::SameLine();
+                bool last_record=s_groundstation_config.record;
                 ImGui::Checkbox("Record", &config.dvr_record);
+                ImGui::Checkbox("GS Record",&s_groundstation_config.record);
+                if(s_groundstation_config.record != last_record){
+                    std::lock_guard<std::mutex> lg(s_groundstation_config.record_mutex);
+                    if(s_groundstation_config.record){
+                        auto time=std::time({});
+                        char filename[]="yyyy-mm-dd-hh:mm:ss.mjpeg";
+                        std::strftime(filename, sizeof(filename), "%F-%T.mjpeg", std::localtime(&time));
+                        s_groundstation_config.record_file=fopen(filename,"wb+");
+
+                        LOGI("start record:{}",std::string(filename));
+                    }else{
+                        fflush(s_groundstation_config.record_file);
+                        fclose(s_groundstation_config.record_file);
+                        s_groundstation_config.record_file=nullptr;
+                    }
+                }
             }
-            if (ImGui::Button("Exit"))
+            if (ImGui::Button("Exit")){
+                if(s_groundstation_config.record){
+                    std::lock_guard<std::mutex> lg(s_groundstation_config.record_mutex);
+                    fflush(s_groundstation_config.record_file);
+                    fclose(s_groundstation_config.record_file); 
+                }
                 abort();
+            }
 
             ImGui::Text("%.3f ms/frame (%.1f FPS) %.1f VFPS", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate, video_fps);
         }
@@ -420,7 +453,6 @@ int run()
 
 int main(int argc, const char* argv[])
 {
-    int argv_handle_state=0;
 
     init_crc8_table();
 
@@ -455,7 +487,7 @@ int main(int argc, const char* argv[])
             i++;
         }else if(temp=="-p"){
             check_argval("port");
-            socket_fd=udp_socket_init(std::string("127.0.0.1"),std::stoi(next));
+            s_groundstation_config.socket_fd=udp_socket_init(std::string("127.0.0.1"),std::stoi(next));
             i++;
         }else if(temp=="-k"){
             check_argval("k");
@@ -481,7 +513,7 @@ int main(int argc, const char* argv[])
 
     for (const auto& itf: rx_descriptor.interfaces)
     {
-        system(fmt::format("iwconfig {} channel 4", itf).c_str());
+        system(fmt::format("iwconfig {} channel 11", itf).c_str());
     }
 
     int result = run();
