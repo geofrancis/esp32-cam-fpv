@@ -12,8 +12,8 @@ Ground2Air_Config_Packet s_ground2air_config_packet;
 SemaphoreHandle_t s_wlan_incoming_mux = xSemaphoreCreateBinary();
 SemaphoreHandle_t s_wlan_outgoing_mux = xSemaphoreCreateBinary();
 
-static TaskHandle_t s_wifi_tx_task = nullptr;
-static TaskHandle_t s_wifi_rx_task = nullptr;
+TaskHandle_t s_wifi_tx_task = nullptr;
+TaskHandle_t s_wifi_rx_task = nullptr;
 Stats s_stats;
 
 static void (*ground2air_config_packet_handler)(Ground2Air_Config_Packet& src)=nullptr;
@@ -328,4 +328,56 @@ esp_err_t set_wlan_power_dBm(float dBm)
     s_wlan_power_dBm = dBm;
     int8_t power = static_cast<int8_t>(((dBm - k_min) / (k_max - k_min)) * 80) + 8;
     return esp_wifi_set_max_tx_power(power);
+}
+
+static esp_err_t esp_netif_set_static_ip(esp_netif_t *netif)
+{
+    esp_netif_ip_info_t ip;
+    esp_netif_dhcps_stop(netif);
+
+    memset(&ip, 0 , sizeof(esp_netif_ip_info_t));
+    ip.ip.addr = ipaddr_addr("192.168.4.1");
+    ip.netmask.addr = ipaddr_addr("255.255.255.0");
+    ip.gw.addr = ipaddr_addr("192.168.4.1");
+    if (esp_netif_set_ip_info(netif, &ip) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set ip info");
+        esp_netif_dhcps_start(netif);
+        return ESP_FAIL;
+    }
+
+    esp_netif_dhcps_start(netif);
+    return ESP_OK;
+}
+
+
+
+esp_err_t start_file_server(const char *base_path);
+
+
+
+void setup_wifi_file_server(void)
+{
+    esp_wifi_stop();
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_t *netif = esp_netif_create_default_wifi_ap();
+
+    ESP_ERROR_CHECK(esp_netif_set_static_ip(netif));
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    wifi_config_t wifi_config;
+    strcpy((char *)wifi_config.ap.ssid,"espvtx"); 
+    wifi_config.ap.ssid_len = strlen("espvtx"); 
+    wifi_config.ap.channel = 5;
+    wifi_config.ap.max_connection = 5;
+    wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+    
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    start_file_server("/sdcard");
+
 }

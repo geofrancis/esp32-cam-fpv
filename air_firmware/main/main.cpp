@@ -100,10 +100,12 @@ IRAM_ATTR void update_status_led()
 }
 
 //////////////////////////////////////////////////////////////////////////////
-
+#ifdef DVR_SUPPORT
 
 SemaphoreHandle_t s_sd_fast_buffer_mux = xSemaphoreCreateBinary();
 SemaphoreHandle_t s_sd_slow_buffer_mux = xSemaphoreCreateBinary();
+
+static bool s_recv_ground2air_packet = false;
 auto _init_result = []() -> bool
 {
   xSemaphoreGive(s_sd_fast_buffer_mux);
@@ -115,10 +117,12 @@ auto _init_result = []() -> bool
 
 static TaskHandle_t s_sd_write_task = nullptr;
 static TaskHandle_t s_sd_enqueue_task = nullptr;
+static TaskHandle_t s_file_server_task = nullptr;
 static bool s_sd_initialized = false;
 static size_t s_sd_file_size = 0;
 static uint32_t s_sd_next_session_id = 0;
 static uint32_t s_sd_next_segment_id = 0;
+
 
 //the fast buffer is RAM and used to transfer data quickly from the camera callback to the slow, SPIRAM buffer. 
 //Writing directly to the SPIRAM buffer is too slow in the camera callback and causes lost frames, so I use this RAM buffer and a separate task (sd_enqueue_task) for that.
@@ -135,11 +139,12 @@ Circular_Buffer s_sd_slow_buffer((uint8_t*)heap_caps_malloc(SD_SLOW_BUFFER_SIZE,
 // this RAM block and write from it directly. This results in several MB/s write speed performance which is good enough.
 static constexpr size_t SD_WRITE_BLOCK_SIZE = 8192;
 
+
 static void shutdown_sd()
 {
     if (!s_sd_initialized)
         return;
-
+    LOG("close sd card!\n");
     esp_vfs_fat_sdmmc_unmount();
     s_sd_initialized = false;
 
@@ -159,26 +164,6 @@ static bool init_sd()
     mount_config.max_files = 2;
     mount_config.allocation_unit_size = 0;
 
-#if 0
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-
-    if (!s_spi_initialized)
-        s_spi_initialized = init_spi((spi_host_device_t)host.slot);
-
-    gpio_set_pull_mode((gpio_num_t)15, GPIO_PULLUP_ONLY);   // CMD, needed in 4- and 1- line modes
-    gpio_set_pull_mode((gpio_num_t)13, GPIO_PULLUP_ONLY);   // D3, needed in 4- and 1-line modes
-
-    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.gpio_cs = GPIO_NUM_13;
-    slot_config.host_id = (spi_host_device_t)host.slot;
-
-    esp_err_t ret = esp_vfs_fat_sdspi_mount("/sdcard", &host, &slot_config, &mount_config, &card);
-    if (ret != ESP_OK)
-    {
-        LOG("Failed to mount SD card VFAT filesystem. Error: %s\n", esp_err_to_name(ret));
-        return false;
-    }
-#else
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     //host.max_freq_khz = SDMMC_FREQ_PROBING;
     host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
@@ -203,8 +188,8 @@ static bool init_sd()
         gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);    // D1, needed in 4-line mode only
         return false;
     }
-#endif
 
+    LOG("sd card inited!\n");
     s_sd_initialized = true;
 
     //find the latest file number
@@ -230,8 +215,10 @@ static FILE* open_sd_file()
     char buffer[64];
     sprintf(buffer, "/sdcard/session%03d_segment%03d.mjpeg", s_sd_next_session_id, s_sd_next_segment_id);
     FILE* f = fopen(buffer, "wb");
-    if (!f)
+    if (!f){
+        LOG("error to open sdcard session %s!\n",buffer);
         return nullptr;
+    }
 
     LOG("Opening session file '%s'\n", buffer);
     s_sd_file_size = 0;
@@ -253,11 +240,7 @@ static void sd_write_proc(void*)
             continue;
         }
 
-        if (!init_sd())
-        {
-            vTaskDelay(3000 / portTICK_PERIOD_MS);
-            continue;
-        }
+        
 
         FILE* f = open_sd_file();
         if (!f)
@@ -384,6 +367,7 @@ IRAM_ATTR static void add_to_sd_fast_buffer(const void* data, size_t size)
         s_stats.sd_drops += size;
 }
 
+#endif
 /////////////////////////////////////////////////////////////////////
 
 int16_t s_wlan_incoming_rssi = 0; //this is protected by the s_wlan_incoming_mux
@@ -458,6 +442,7 @@ IRAM_ATTR void packet_received_cb(void* buf, wifi_promiscuous_pkt_type_t type)
 static void handle_ground2air_config_packet(Ground2Air_Config_Packet& src)
 {
     Ground2Air_Config_Packet& dst = s_ground2air_config_packet;
+    s_recv_ground2air_packet = true;
     if (dst.wifi_rate != src.wifi_rate)
     {
         LOG("Wifi rate changed from %d to %d\n", (int)dst.wifi_rate, (int)src.wifi_rate);
@@ -547,6 +532,7 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
 
     if(!packet_data){
         LOG("no data buf!\n");
+        return ;
     }
 
     Air2Ground_Video_Packet& packet = *(Air2Ground_Video_Packet*)packet_data;
@@ -639,9 +625,10 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
                 {
                     *ptr++ = *src; src += stride;
                 }
-
+#ifdef DVR_SUPPORT
                 if (s_ground2air_config_packet.dvr_record)
                     add_to_sd_fast_buffer(start_ptr, c);
+#endif
             }
         }
 
@@ -816,6 +803,30 @@ extern "C" void app_main()
     setup_wifi(s_ground2air_config_packet.wifi_rate, 11, 20.0f, packet_received_cb);
     set_ground2air_config_packet_handler(handle_ground2air_config_packet);
 
+    #ifdef DVR_SUPPORT
+    init_sd();
+    
+    auto a = [](void * arg){
+        int wait_seconds = 10;
+        while(wait_seconds--){
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            LOG("wait for ground 2 air packet..");
+            if(s_recv_ground2air_packet){
+                break;
+            }
+        }
+
+        if(wait_seconds < 0){
+            LOG("no ground 2 air packet for 10 seconds. setup file server...");
+            vTaskSuspend(s_wifi_rx_task);
+            vTaskSuspend(s_wifi_tx_task);
+            setup_wifi_file_server();
+        }
+        vTaskDelete(NULL);
+    };
+
+    xTaskCreatePinnedToCore((TaskFunction_t)a, "file server", 4096, nullptr, 1, &s_file_server_task, tskNO_AFFINITY);
+
     {
         int core = tskNO_AFFINITY;
         BaseType_t res = xTaskCreatePinnedToCore(&sd_write_proc, "SD Write", 4096, nullptr, 1, &s_sd_write_task, core);
@@ -828,6 +839,8 @@ extern "C" void app_main()
         if (res != pdPASS)
             LOG("Failed sd enqueue task: %d\n", res);
     }
+    #endif
+
     init_camera();
     printf("MEMORY Before Loop: \n");
     heap_caps_print_heap_info(MALLOC_CAP_8BIT);
