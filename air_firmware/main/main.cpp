@@ -38,7 +38,9 @@
 #include "ll_cam.h" // cam_obj_t defination, used in camera_data_available
 
 #include "wifi.h"
+#include "nvs_args.h"
 
+uint16_t g_wifi_channel;
 static int s_stats_last_tp = -10000;
 
 
@@ -160,7 +162,11 @@ static bool init_sd()
     sdmmc_card_t* card = nullptr;
 
     esp_vfs_fat_sdmmc_mount_config_t mount_config;
+#ifdef CAMERA_MODEL_ESP_VTX
+    mount_config.format_if_mount_failed = true;
+#else
     mount_config.format_if_mount_failed = false;
+#endif
     mount_config.max_files = 2;
     mount_config.allocation_unit_size = 0;
 
@@ -245,7 +251,6 @@ static void sd_write_proc(void*)
         FILE* f = open_sd_file();
         if (!f)
         {
-            shutdown_sd();
             vTaskDelay(1000 / portTICK_PERIOD_MS); 
             continue;
         }
@@ -298,10 +303,10 @@ static void sd_write_proc(void*)
             fflush(f);
             fsync(fileno(f));
             fclose(f);
+        }else{
+            shutdown_sd();
         }
 
-        if (!s_ground2air_config_packet.dvr_record || error)
-            shutdown_sd();
     }
 }
 
@@ -789,18 +794,17 @@ extern "C" void app_main()
     printf("MEMORY at start: \n");
     heap_caps_print_heap_info(MALLOC_CAP_8BIT);
 
-    //Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
+    nvs_args_init();
+    g_wifi_channel = (uint16_t)nvs_args_read("channel");
+    if(g_wifi_channel > 13){
+        g_wifi_channel = DEFAULT_WIFI_CHANNEL;
+        nvs_args_set("channel", g_wifi_channel);
+        LOG("could not find the nvs store variable:channel, set wifi channel to default %d", g_wifi_channel);
     }
-    ESP_ERROR_CHECK(ret);
 
     initialize_status_led();
 
-    setup_wifi(s_ground2air_config_packet.wifi_rate, 11, 20.0f, packet_received_cb);
+    setup_wifi(s_ground2air_config_packet.wifi_rate, g_wifi_channel, 20.0f, packet_received_cb);
     set_ground2air_config_packet_handler(handle_ground2air_config_packet);
 
     #ifdef DVR_SUPPORT

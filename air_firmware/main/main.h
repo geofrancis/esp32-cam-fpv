@@ -8,6 +8,9 @@
 #define CAMERA_MODEL_AI_THINKER
 #define DVR_SUPPORT
 
+#define DEFAULT_WIFI_CHANNEL 11
+extern uint16_t g_wifi_channel;
+
 #if defined(CAMERA_MODEL_WROVER_KIT)
 #define PWDN_GPIO_NUM    -1
 #define RESET_GPIO_NUM   -1
