@@ -67,6 +67,7 @@ struct{
     bool record;
     FILE * record_file=nullptr;
     std::mutex record_mutex;
+    int wifi_channel;
 }s_groundstation_config;
 float video_fps = 0;
 static void comms_thread_proc()
@@ -303,7 +304,7 @@ void ImageRotated(ImTextureID tex_id, ImVec2 center, ImVec2 size, float angle, f
     draw_list->AddImageQuad(tex_id, pos[0], pos[1], pos[2], pos[3], uvs[0], uvs[1], uvs[2], uvs[3], IM_COL32_WHITE);
 }
 
-int run()
+int run(char* argv[])
 {
     HUD hud(*s_hal);
 
@@ -333,7 +334,7 @@ int run()
     Clock::time_point last_stats_tp = Clock::now();
     Clock::time_point last_tp = Clock::now();
 
-    auto f = [&config]{
+    auto f = [&config,&argv]{
 
         ImGui::Begin("HAL");
         {
@@ -378,6 +379,9 @@ int run()
                 config.camera.denoise = (int8_t)value;
             }
             {
+                ImGui::SliderInt("WIFI Channel", &s_groundstation_config.wifi_channel, 1, 12);
+            }
+            {
                 //ImGui::Checkbox("LC", &config.camera.lenc);
                 //ImGui::SameLine();
                 //ImGui::Checkbox("DCW", &config.camera.dcw);
@@ -414,6 +418,12 @@ int run()
                     fclose(s_groundstation_config.record_file); 
                 }
                 abort();
+            }
+            if (ImGui::Button("Restart")){
+                char tempstr[30];
+                sprintf(tempstr,"ESPVTX_WIFI_CHN=%d",s_groundstation_config.wifi_channel);
+                putenv(tempstr);
+                execv(argv[0],argv);
             }
 
             ImGui::Text("%.3f ms/frame (%.1f FPS) %.1f VFPS", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate, video_fps);
@@ -468,12 +478,12 @@ int main(int argc, const char* argv[])
     rx_descriptor.coding_k = s_ground2air_config_packet.fec_codec_k;
     rx_descriptor.coding_n = s_ground2air_config_packet.fec_codec_n;
     rx_descriptor.mtu = s_ground2air_config_packet.fec_codec_mtu;
-    rx_descriptor.interfaces = {"wlx00127b22ac39"};
+    rx_descriptor.interfaces = {"wlxc01c30222455"};
     Comms::TX_Descriptor tx_descriptor;
     tx_descriptor.coding_k = 2;
     tx_descriptor.coding_n = 6;
     tx_descriptor.mtu = GROUND2AIR_DATA_MAX_SIZE;
-    tx_descriptor.interface = "wlx00127b22ac39";
+    tx_descriptor.interface = "wlxc01c30222455";
 
     for(int i=1;i<argc;++i){
         auto temp = std::string(argv[i]);
@@ -508,6 +518,16 @@ int main(int argc, const char* argv[])
         }
     }
 
+    {
+        char *temp = getenv("ESPVTX_WIFI_CHN");
+        if(temp){
+            s_groundstation_config.wifi_channel = atoi(temp);
+        }else{
+            s_groundstation_config.wifi_channel = 11;
+        }
+    }
+    
+
     if (!s_comms.init(rx_descriptor, tx_descriptor))
         return -1;
 
@@ -516,7 +536,7 @@ int main(int argc, const char* argv[])
         system(fmt::format("iwconfig {} channel 11", itf).c_str());
     }
 
-    int result = run();
+    int result = run((char **)argv);
 
     s_hal->shutdown();
 
