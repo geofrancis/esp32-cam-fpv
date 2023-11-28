@@ -5,7 +5,7 @@
 
 /////////////////////////////////////////////////////////////////////////
 /*Select Camera Model*/
-#define CAMERA_MODEL_AI_THINKER
+#define CAMERA_MODEL_ESP_VTX
 #define DVR_SUPPORT
 
 #define DEFAULT_WIFI_CHANNEL 11

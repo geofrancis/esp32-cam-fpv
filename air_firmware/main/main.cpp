@@ -102,12 +102,12 @@ IRAM_ATTR void update_status_led()
 }
 
 //////////////////////////////////////////////////////////////////////////////
+static bool s_recv_ground2air_packet = false;
 #ifdef DVR_SUPPORT
 
 SemaphoreHandle_t s_sd_fast_buffer_mux = xSemaphoreCreateBinary();
 SemaphoreHandle_t s_sd_slow_buffer_mux = xSemaphoreCreateBinary();
 
-static bool s_recv_ground2air_packet = false;
 auto _init_result = []() -> bool
 {
   xSemaphoreGive(s_sd_fast_buffer_mux);
