@@ -38,3 +38,4 @@ deploy.sh
 sdkconfig.old
 air_firmware/build
 .vscode
+/air_firmware/sdkconfig.dev
