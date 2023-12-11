@@ -439,6 +439,10 @@ int run(char* argv[])
     {
         s_decoder.unlock_output();
         size_t count = s_decoder.lock_output();
+        if ( count == 0)
+        {
+            //std::this_thread::yield();
+        }
         video_frame_count += count;
         s_hal->set_video_channel(s_decoder.get_video_texture_id());
 
@@ -478,12 +482,12 @@ int main(int argc, const char* argv[])
     rx_descriptor.coding_k = s_ground2air_config_packet.fec_codec_k;
     rx_descriptor.coding_n = s_ground2air_config_packet.fec_codec_n;
     rx_descriptor.mtu = s_ground2air_config_packet.fec_codec_mtu;
-    rx_descriptor.interfaces = {"wlxc01c30222455"};
+    rx_descriptor.interfaces = {"wlan0mon"};
     Comms::TX_Descriptor tx_descriptor;
     tx_descriptor.coding_k = 2;
     tx_descriptor.coding_n = 6;
     tx_descriptor.mtu = GROUND2AIR_DATA_MAX_SIZE;
-    tx_descriptor.interface = "wlxc01c30222455";
+    tx_descriptor.interface = "wlan0mon";
 
     for(int i=1;i<argc;++i){
         auto temp = std::string(argv[i]);
