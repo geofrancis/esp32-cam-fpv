@@ -815,7 +815,8 @@ extern "C" void app_main()
         while(wait_seconds--){
             vTaskDelay(1000 / portTICK_PERIOD_MS);
             LOG("wait for ground 2 air packet..");
-            if(s_recv_ground2air_packet){
+         //   if(s_recv_ground2air_packet)
+         {
                 break;
             }
         }
