@@ -303,16 +303,30 @@ bool PI_HAL::init_display_sdl()
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     SDL_DisplayMode mode;
     int res = SDL_GetCurrentDisplayMode(0, &mode);
-    m_impl->width = mode.w;
-	m_impl->height = mode.h;
+//    m_impl->width = mode.w;
+//    m_impl->height = mode.h;
+
+    m_impl->width = 800;
+    m_impl->height = 600;
 
     printf("width:%d height:%d\n",m_impl->width,m_impl->height);
+/*
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(
         SDL_WINDOW_OPENGL | 
         SDL_WINDOW_SHOWN | 
         SDL_WINDOW_RESIZABLE | 
         SDL_WINDOW_ALLOW_HIGHDPI);
     m_impl->window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_impl->width, m_impl->height, window_flags);
+
+*/
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(
+        SDL_WINDOW_FULLSCREEN | 
+        SDL_WINDOW_OPENGL | 
+        SDL_WINDOW_SHOWN | 
+        SDL_WINDOW_BORDERLESS );
+
+    m_impl->window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", 0, 0, m_impl->width, m_impl->height, window_flags);
+
     SDL_GLContext gl_context = SDL_GL_CreateContext(m_impl->window);
     SDL_GL_MakeCurrent(m_impl->window, gl_context);
     SDL_GL_SetSwapInterval(1); // Enable vsync
