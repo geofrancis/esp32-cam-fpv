@@ -1,6 +1,6 @@
 This folder contains prebuilt nextmon drivers for Raspberry Pi Zero 2W with monitor mode support.
 
-For Linux kernel core 5.10 only!
+For Linux kernel 5.10 only!
 
 (check core name with ```uname -r```)
 
@@ -34,4 +34,4 @@ For full building instructions check  https://github.com/seemoo-lab/nexmon
 
 Make sure to build ```patches/bcm43430a1/7_45_41_46/nexmon/``` (driver + RPI0W firmware) and ```patches/bcm43436b0/9_88_4_65/nexmon/``` (RPI02W firmware).
 
-Prebuilt binaries for later Linux cores can also be found in https://github.com/evilsocket/pwnagotchi images.
+Prebuilt binaries for later Linux kernels can also be found in https://github.com/evilsocket/pwnagotchi images.
