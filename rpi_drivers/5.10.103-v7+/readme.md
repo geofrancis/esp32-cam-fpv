@@ -43,7 +43,9 @@ Checking
 Building
 -
 
-For full building instructions check  https://github.com/seemoo-lab/nexmon
+Patched drivers can be built for other kernel versions.
+
+For full building instructions check  https://github.com/seemoo-lab/nexmon 
 
 Make sure to build ```patches/bcm43430a1/7_45_41_46/nexmon/``` which builds driver:```brcmfmac.ko``` and RPI0W firmware, and ```patches/bcm43436b0/9_88_4_65/nexmon/``` which builds RPI02W firmware:```brcmfmac43436-sdio.bin```.
 
