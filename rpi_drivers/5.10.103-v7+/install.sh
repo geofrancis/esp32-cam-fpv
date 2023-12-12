@@ -1,3 +1,4 @@
+#!/bin/bash
 sudo su
 apt-get update && apt-get full-upgrade
 sudo apt install raspberrypi-kernel-headers git libgmp3-dev gawk qpdf bison flex make autoconf libtool texinfo
