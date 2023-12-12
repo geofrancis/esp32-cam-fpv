@@ -10,7 +10,9 @@ https://downloads.raspberrypi.org/raspios_full_armhf/images/raspios_full_armhf-2
 
 Installation
 -
-./install.sh
+```./install.sh```
+
+```reboot```
 
 Checking
 -
