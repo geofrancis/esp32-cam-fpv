@@ -1,8 +1,6 @@
 This folder contains prebuilt nextmon drivers for Raspberry Pi Zero 2W with monitor mode support.
 
-For Linux kernel 5.10 only!
-
-(check core name with ```uname -r```)
+For Linux kernel 5.10. only!
 
 https://downloads.raspberrypi.org/raspios_armhf/images/raspios_armhf-2021-05-28/
 https://downloads.raspberrypi.org/raspios_lite_armhf/images/raspios_lite_armhf-2021-05-28/
@@ -10,6 +8,16 @@ https://downloads.raspberrypi.org/raspios_full_armhf/images/raspios_full_armhf-2
 
 Installation
 -
+Download ditribution.
+
+```sudo apt-get update & apt-get upgrade```
+
+Check core version:
+
+```uname -r```
+
+It should be 5.10.103-v7+. **It will not work for other core version.***
+
 ```./install.sh```
 
 ```reboot```
@@ -22,8 +30,11 @@ Checking
 
 ```sudo airmon-ng start wlan0```
 
+(ignore error)
 
-=> ```wlan0mon``` should appear
+```iwconfig```
+
+=> ```wlan0mon``` should appear, started in monitor mode.
 
 ```sudo wireshark```
 
