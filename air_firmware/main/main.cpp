@@ -697,7 +697,7 @@ static void init_camera()
     config.pin_reset = RESET_GPIO_NUM;
     config.xclk_freq_hz = 20000000;
     config.pixel_format = PIXFORMAT_JPEG;
-    config.frame_size = FRAMESIZE_HQVGA;
+    config.frame_size = FRAMESIZE_SVGA;
     config.jpeg_quality = 4;
     config.fb_count = 2;
     config.grab_mode = CAMERA_GRAB_LATEST;
@@ -714,6 +714,7 @@ static void init_camera()
 
     sensor_t *s = esp_camera_sensor_get();
     s->set_framesize(s, FRAMESIZE_HQVGA);
+    config.jpeg_quality = 12;
     s->set_saturation(s, 0);
 }
 

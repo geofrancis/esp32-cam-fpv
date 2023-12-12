@@ -6,7 +6,7 @@
 /////////////////////////////////////////////////////////////////////////
 /*Select Camera Model*/
 #define CAMERA_MODEL_AI_THINKER
-#define DVR_SUPPORT
+//#define DVR_SUPPORT
 
 #define DEFAULT_WIFI_CHANNEL 11
 extern uint16_t g_wifi_channel;
