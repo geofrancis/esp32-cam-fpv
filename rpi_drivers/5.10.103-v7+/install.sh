@@ -1,5 +1,7 @@
 #!/bin/bash
 sudo apt install raspberrypi-kernel-headers git libgmp3-dev gawk qpdf bison flex make autoconf libtool texinfo
+
+cd /home/pi/
 git clone https://github.com/seemoo-lab/nexmon.git
 
 cd buildtools/isl-0.10
