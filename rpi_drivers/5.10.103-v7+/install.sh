@@ -25,16 +25,18 @@ cd nexmon
 source setup_env.sh
 make
 
+# driver 43430 1
 cd /home/pi/
 cd nexmon
+#------------------------- Uncomment right version of the card here ----------------
+#cd patches/bcm43430a1/7_45_41_26/nexmon/
 cd patches/bcm43430a1/7_45_41_46/nexmon/
-make
-make backup-firmware
-make install-firmware
-
-cd /home/pi/
-cd nexmon
-cd patches/bcm43436b0/9_88_4_65/nexmon/
+#cd patches/bcm43455c0/7_45_154/nexmon/
+#cd patches/bcm43455c0/7_45_154/nexmon/
+#cd patches/bcm43455c0/7_45_189/nexmon/
+#cd patches/bcm43455c0/7_45_206/nexmon/
+#cd patches/bcm43455c0/7_45_241/nexmon/
+#cd patches/bcm43436b0/9_88_4_65/nexmon/
 make
 make backup-firmware
 make install-firmware
