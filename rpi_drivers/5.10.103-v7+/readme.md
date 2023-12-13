@@ -22,6 +22,17 @@ Check core version:
 
 It should be 5.10.103-v7+. **It will not work for other core version.***
 
+Check wifi card model:
+
+```iwconfig```
+
+It should be ```43430``` or ```43436``` or ```43455```.
+
+Edit ```install.sh```, find section ```Uncomment right version of the card here``` and uncomment ```cd``` command for your card.
+
+This part a little bit misterios for me. It seems that there are multiple versions of firmware, ```bcm43430a1/7_45_41_46/``` worked for me.
+
+
 ```./install.sh```
 
 Check log if everything is went correctly.
@@ -49,13 +60,11 @@ Checking
 
 or ```tcpdump -i wlan0mon```
 
+If no packets are received, uncomment other folder in script ad run again.
+
 Building for other kernel versions
 -
 
 Check supported cores versions in https://github.com/seemoo-lab/nexmon/tree/master/patches/driver
 
-For full building instructions check  https://github.com/seemoo-lab/nexmon ,this is what install.sh above is doing.
-
-Make sure to build patches for all cards (```patches/bcm43430a1/7_45_41_46/nexmon/``` and others), it seems that cards on RPI02W can vary.
-
-
+For full building instructions check  https://github.com/seemoo-lab/nexmon, this is what install.sh above is doing.
