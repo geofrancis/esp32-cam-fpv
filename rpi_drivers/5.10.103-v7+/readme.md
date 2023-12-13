@@ -56,6 +56,6 @@ Check supported cores versions in https://github.com/seemoo-lab/nexmon/tree/mast
 
 For full building instructions check  https://github.com/seemoo-lab/nexmon ,this is what install.sh above is doing.
 
-Make sure to build ```patches/bcm43430a1/7_45_41_46/nexmon/``` which builds driver:```brcmfmac.ko``` and RPI0W firmware, and ```patches/bcm43436b0/9_88_4_65/nexmon/``` which builds RPI02W firmware:```brcmfmac43436-sdio.bin```.
+Make sure to build ```patches/bcm43430a1/7_45_41_46/nexmon/```, then ```patches/bcm43436b0/9_88_4_65/nexmon/```. It worked only this way for me.
 
 
