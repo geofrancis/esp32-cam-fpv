@@ -1,12 +1,12 @@
-Building image for Raspberry Pi Zero 2W with monitor mode support on internal wireless card(broadcom 43436)
+Building image for Raspberry Pi Zero 2W with monitor mode support on internal wireless card(broadcom 43430,43436,43455)
 
-For Linux kernel 5.10. only!
+For Linux kernel 5.10.103-v7+ only!
 
 Whole process will take ~2h.
 
 Installation
 -
-Download distribution of Rapberri Pi OS (Buster 32bit) with 5/10. kernel:
+Download distribution of Rapberri Pi OS (Buster 32bit) with 5.10.17-v7+ kernel:
 
 https://downloads.raspberrypi.org/raspios_armhf/images/raspios_armhf-2021-05-28/
 https://downloads.raspberrypi.org/raspios_lite_armhf/images/raspios_lite_armhf-2021-05-28/
@@ -16,11 +16,11 @@ Update to kernel 5.10.103-v7+:
 
 ```sudo apt-get update && apt-get full-upgrade```
 
-Check core version:
+Check kernel version:
 
 ```uname -r```
 
-It should be 5.10.103-v7+. **It will not work for other core version.***
+It should be 5.10.103-v7+. **It will not work for other kernel version.***
 
 Check wifi card model:
 
@@ -37,6 +37,8 @@ This part a little bit misterios for me. It seems that there are multiple versio
 
 
 ```./install.sh```
+
+During installation, answer Yes to to install kernel headers.
 
 Check log if everything is went correctly.
 
