@@ -30,7 +30,8 @@ It should be ```43430``` or ```43436``` or ```43455```.
 
 Edit ```install.sh```, find section ```Uncomment right version of the card here``` and uncomment ```cd``` command for your card.
 
-This part a little bit misterios for me. It seems that there are multiple versions of firmware, ```bcm43430a1/7_45_41_46/``` worked for me.
+This part a little bit misterios for me. It seems that there are multiple versions of firmware, and patches for the different firmwares overwrite the same binary file in the kernel. You have to build only correct one.
+```bcm43430a1/7_45_41_46/``` worked for me.
 
 
 ```./install.sh```
