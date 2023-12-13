@@ -23,7 +23,9 @@ Check core version:
 It should be 5.10.103-v7+. **It will not work for other core version.***
 
 Check wifi card model:
+
 ```sudo apt-get install aircrack-ng```
+
 ```sudo airmon-ng```
 
 It should be ```43430``` or ```43436``` or ```43455```.
