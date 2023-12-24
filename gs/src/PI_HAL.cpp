@@ -318,7 +318,7 @@ bool PI_HAL::init_display_sdl()
     {
         SDL_DisplayMode mode;
         int res = SDL_GetCurrentDisplayMode(0, &mode);
-        if ( (m_impl->width > mode.w) || (m_impl->height > mode.h) )
+        if ( (m_impl->width > (uint32_t)mode.w) || (m_impl->height > (uint32_t)mode.h) )
         {
             m_impl->width = mode.w;
             m_impl->height = mode.h;
@@ -693,26 +693,26 @@ void PI_HAL::unlock_main_context()
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-void set_width( int w )
+void PI_HAL::set_width( int w )
 {
     m_impl->width = w;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-void set_height( int h )
+void PI_HAL::set_height( int h )
 {
     m_impl->height = h;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-void set_fullscreen( bool b )
+void PI_HAL::set_fullscreen( bool b )
 {
     m_impl->fullscreen = b;
 }
 
-void set_vsync( bool b )
+void PI_HAL::set_vsync( bool b )
 {
     m_impl->vsync = b;
 }

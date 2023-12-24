@@ -21,4 +21,9 @@ public:
     virtual void set_video_channel(unsigned int id)=0;
     virtual void add_render_callback(std::function<void()> func)=0;
     virtual bool process() = 0;
+
+    virtual void set_width( int w ) = 0;
+    virtual void set_height( int h ) = 0;
+    virtual void set_fullscreen( bool b ) = 0;
+    virtual void set_vsync( bool b ) = 0;
 };

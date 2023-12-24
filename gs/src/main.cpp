@@ -518,16 +518,16 @@ int main(int argc, const char* argv[])
             s_groundstation_config.wifi_channel = std::stoi(next);
         }else if(temp=="--w"){
             check_argval("w");
-            s_hal.set_width(std::stoi(next));
+            s_hal->set_width(std::stoi(next));
         }else if(temp=="--h"){
             check_argval("h");
-            s_hal.set_height(std::stoi(next));
+            s_hal->set_height(std::stoi(next));
         }else if(temp=="--fullscreen"){
             check_argval("fullscreen");
-            s_hal.set_fullscreen(std::stoi(next) > 0);
+            s_hal->set_fullscreen(std::stoi(next) > 0);
         }else if(temp=="--vsync"){
             check_argval("vsync");
-            s_hal.set_fullscreen(std::stoi(next) > 0);
+            s_hal->set_fullscreen(std::stoi(next) > 0);
         }else if(temp=="-help"){
             printf("gs -option val -option val\n");
             printf("-rx <rx_interface1> <rx_interface2>, default: wlan0mon single interface\n");
