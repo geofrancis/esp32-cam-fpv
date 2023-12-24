@@ -8,5 +8,11 @@
 			"path": "../components/common/"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"files.associations": {
+			"array": "cpp",
+			"string": "cpp",
+			"string_view": "cpp"
+		}
+	}
 }

@@ -27,6 +27,11 @@ public:
         render_callbacks.push_back(func);
     }
 
+    void set_width( int w );
+    void set_height( int h );
+    void set_fullscreen( bool b );
+    void set_vsync( bool b );
+
 private:
     struct Impl;
     std::unique_ptr<Impl> m_impl;

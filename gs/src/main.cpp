@@ -470,24 +470,20 @@ int main(int argc, const char* argv[])
 
     init_crc8_table();
 
-    s_hal.reset(new PI_HAL());
-    if (!s_hal->init())
-        return -1;
-
-#ifdef TEST_LATENCY
-    gpioSetMode(17, PI_OUTPUT);
-#endif
-
     Comms::RX_Descriptor rx_descriptor;
-    rx_descriptor.coding_k = s_ground2air_config_packet.fec_codec_k;
-    rx_descriptor.coding_n = s_ground2air_config_packet.fec_codec_n;
-    rx_descriptor.mtu = s_ground2air_config_packet.fec_codec_mtu;
     rx_descriptor.interfaces = {"wlan0mon"};
+
     Comms::TX_Descriptor tx_descriptor;
-    tx_descriptor.coding_k = 2;
-    tx_descriptor.coding_n = 6;
-    tx_descriptor.mtu = GROUND2AIR_DATA_MAX_SIZE;
     tx_descriptor.interface = "wlan0mon";
+
+    {
+        char *temp = getenv("ESPVTX_WIFI_CHN");
+        if(temp){
+            s_groundstation_config.wifi_channel = atoi(temp);
+        }else{
+            s_groundstation_config.wifi_channel = 11;
+        }
+    }
 
     for(int i=1;i<argc;++i){
         auto temp = std::string(argv[i]);
@@ -517,27 +513,62 @@ int main(int argc, const char* argv[])
             LOGI("set rx fec_n to {}",rx_descriptor.coding_n);
         }else if(temp=="--rx"){
             rx_descriptor.interfaces.clear();
+        }else if(temp=="--ch"){
+            check_argval("ch");
+            s_groundstation_config.wifi_channel = std::stoi(next);
+        }else if(temp=="--w"){
+            check_argval("w");
+            s_hal.set_width(std::stoi(next));
+        }else if(temp=="--h"){
+            check_argval("h");
+            s_hal.set_height(std::stoi(next));
+        }else if(temp=="--fullscreen"){
+            check_argval("fullscreen");
+            s_hal.set_fullscreen(std::stoi(next) > 0);
+        }else if(temp=="--vsync"){
+            check_argval("vsync");
+            s_hal.set_fullscreen(std::stoi(next) > 0);
+        }else if(temp=="-help"){
+            printf("gs -option val -option val\n");
+            printf("-rx <rx_interface1> <rx_interface2>, default: wlan0mon single interface\n");
+            printf("-tx <tx_interface>, default: wlan0mon\n");
+            printf("-p <gd_ip>, default: disabled\n");
+            printf("-k <rx_fec_k>, default: 12\n");
+            printf("-n <rx_fec_n>, default: 20\n");
+            printf("-ch <wifi_channel>, default: 11\n");
+            printf("-w <width>, default: 800\n");
+            printf("-h <width>, default: 600\n");
+            printf("-fullscreen <1/0>, default: 1\n");
+            printf("-vsync <1/0>, default: 1\n");
+            printf("-help\n");
+            return 0;
         }else{
             rx_descriptor.interfaces.push_back(temp);
         }
     }
 
-    {
-        char *temp = getenv("ESPVTX_WIFI_CHN");
-        if(temp){
-            s_groundstation_config.wifi_channel = atoi(temp);
-        }else{
-            s_groundstation_config.wifi_channel = 11;
-        }
-    }
-    
+    rx_descriptor.coding_k = s_ground2air_config_packet.fec_codec_k;
+    rx_descriptor.coding_n = s_ground2air_config_packet.fec_codec_n;
+    rx_descriptor.mtu = s_ground2air_config_packet.fec_codec_mtu;
+
+    tx_descriptor.coding_k = 2;
+    tx_descriptor.coding_n = 6;
+    tx_descriptor.mtu = GROUND2AIR_DATA_MAX_SIZE;
+
+    s_hal.reset(new PI_HAL());
+    if (!s_hal->init())
+        return -1;
+
+#ifdef TEST_LATENCY
+    gpioSetMode(17, PI_OUTPUT);
+#endif
 
     if (!s_comms.init(rx_descriptor, tx_descriptor))
         return -1;
 
     for (const auto& itf: rx_descriptor.interfaces)
     {
-        system(fmt::format("iwconfig {} channel 11", itf).c_str());
+        system(fmt::format("iwconfig {} channel {}", itf, s_groundstation_config.wifi_channel).c_str());
     }
 
     int result = run((char **)argv);

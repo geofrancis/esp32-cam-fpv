@@ -870,3 +870,54 @@ extern "C" void app_main()
         update_status_led();
     }
 }
+
+/*
+
+Air receive:
+1) packet_received_cb()- called by Wifi library when wifi packet is received
+  - feeds data to s_fec_decoder.decode_data(). No data type checking at all.
+
+2) s_fec_decoder.decode_data()
+ - allocates item in m_decoder.packet_pool
+ - concatenates small packets until mtu size (because wifi packets may be broken to smaller parts by wifi layer)
+ - enquees packets into m_decoder.packet_queue
+
+3) decoder_task_proc()  
+ - retrives item from m_decoder.packet_queue
+ - inserts either in m_decoder.block_packets or m_decoder.block_fec_packets
+ - inserts into s_wlan_incoming_queue either received or restored packets
+ - signals s_wifi_rx_task
+
+4) s_wifi_rx_task
+  - parses packets: Ground2Air_Header::Type::Config, Ground2Air_Header::Type::Data
+ 
+
+Air send:
+1) camera_data_available callback from camera library
+ - send_air2ground_video_packet() - passes Air2Ground_Video_Packet to s_fec_encode.
+ - flush_encode_packet() - concatenates data until mtu size and passes to m_encoder.packet_queue
+ 
+ 2) encoder_task_proc()
+  - gathers packets in m_encoder.block_packets
+  - calls fec_encode(()
+  - add_to_wlan_outgoing_queue() - places encoded packets into s_wlan_outgoing_queue
+
+3) wifi_tx_proc
+ - reads s_wlan_outgoing_queue
+ - calls esp_wifi_80211_tx() 
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+*/

@@ -70,8 +70,11 @@ sudo -E LD_LIBRARY_PATH=/usr/local/lib DISPLAY=:0 ./gs
 
 struct PI_HAL::Impl
 {
-    uint32_t width = 1920;
-    uint32_t height = 1080;
+    uint32_t width = 800;
+    uint32_t height = 600;
+
+    bool fullscreen = false;
+    bool vsync = true;
 
     std::mutex context_mutex;
 
@@ -301,35 +304,39 @@ bool PI_HAL::init_display_sdl()
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    SDL_DisplayMode mode;
-    int res = SDL_GetCurrentDisplayMode(0, &mode);
-//    m_impl->width = mode.w;
-//    m_impl->height = mode.h;
 
-    m_impl->width = 800;
-    m_impl->height = 600;
+    if (m_impl->fullscreen)
+    {
+        SDL_WindowFlags window_flags = (SDL_WindowFlags)(
+            SDL_WINDOW_FULLSCREEN | 
+            SDL_WINDOW_OPENGL | 
+            SDL_WINDOW_SHOWN | 
+            SDL_WINDOW_BORDERLESS );
+        m_impl->window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", 0, 0, m_impl->width, m_impl->height, window_flags);
+    }
+    else
+    {
+        SDL_DisplayMode mode;
+        int res = SDL_GetCurrentDisplayMode(0, &mode);
+        if ( (m_impl->width > mode.w) || (m_impl->height > mode.h) )
+        {
+            m_impl->width = mode.w;
+            m_impl->height = mode.h;
+        }
+
+        SDL_WindowFlags window_flags = (SDL_WindowFlags)(
+            SDL_WINDOW_OPENGL | 
+            SDL_WINDOW_SHOWN | 
+            SDL_WINDOW_RESIZABLE | 
+            SDL_WINDOW_ALLOW_HIGHDPI);
+        m_impl->window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_impl->width, m_impl->height, window_flags);
+    }
 
     printf("width:%d height:%d\n",m_impl->width,m_impl->height);
-/*
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(
-        SDL_WINDOW_OPENGL | 
-        SDL_WINDOW_SHOWN | 
-        SDL_WINDOW_RESIZABLE | 
-        SDL_WINDOW_ALLOW_HIGHDPI);
-    m_impl->window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_impl->width, m_impl->height, window_flags);
-
-*/
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(
-        SDL_WINDOW_FULLSCREEN | 
-        SDL_WINDOW_OPENGL | 
-        SDL_WINDOW_SHOWN | 
-        SDL_WINDOW_BORDERLESS );
-
-    m_impl->window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", 0, 0, m_impl->width, m_impl->height, window_flags);
 
     SDL_GLContext gl_context = SDL_GL_CreateContext(m_impl->window);
     SDL_GL_MakeCurrent(m_impl->window, gl_context);
-    SDL_GL_SetSwapInterval(1); // Enable vsync
+    SDL_GL_SetSwapInterval(m_impl->vsync ? 1 : 0 ); // Enable vsync
 
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
@@ -686,8 +693,35 @@ void PI_HAL::unlock_main_context()
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+void set_width( int w )
+{
+    m_impl->width = w;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+void set_height( int h )
+{
+    m_impl->height = h;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+void set_fullscreen( bool b )
+{
+    m_impl->fullscreen = b;
+}
+
+void set_vsync( bool b )
+{
+    m_impl->vsync = b;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
 bool PI_HAL::process()
 {
     update_ts();
     return update_display();
 }
+
