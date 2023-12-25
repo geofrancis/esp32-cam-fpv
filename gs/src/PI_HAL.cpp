@@ -70,8 +70,8 @@ sudo -E LD_LIBRARY_PATH=/usr/local/lib DISPLAY=:0 ./gs
 
 struct PI_HAL::Impl
 {
-    uint32_t width = 800;
-    uint32_t height = 600;
+    uint32_t width = 1280;
+    uint32_t height = 720;
 
     bool fullscreen = false;
     bool vsync = true;
@@ -312,13 +312,13 @@ bool PI_HAL::init_display_sdl()
             SDL_WINDOW_OPENGL | 
             SDL_WINDOW_SHOWN | 
             SDL_WINDOW_BORDERLESS );
-        m_impl->window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", 0, 0, m_impl->width, m_impl->height, window_flags);
+        m_impl->window = SDL_CreateWindow("esp32-cam-fpv", 0, 0, m_impl->width, m_impl->height, window_flags);
     }
     else
     {
         SDL_DisplayMode mode;
         int res = SDL_GetCurrentDisplayMode(0, &mode);
-        if ( (m_impl->width > mode.w) || (m_impl->height > mode.h) )
+        if ( (m_impl->width > (uint32_t)mode.w) || (m_impl->height > (uint32_t)mode.h) )
         {
             m_impl->width = mode.w;
             m_impl->height = mode.h;
@@ -329,7 +329,7 @@ bool PI_HAL::init_display_sdl()
             SDL_WINDOW_SHOWN | 
             SDL_WINDOW_RESIZABLE | 
             SDL_WINDOW_ALLOW_HIGHDPI);
-        m_impl->window = SDL_CreateWindow("Dear ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_impl->width, m_impl->height, window_flags);
+        m_impl->window = SDL_CreateWindow("esp32-cam-fpv", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, m_impl->width, m_impl->height, window_flags);
     }
 
     printf("width:%d height:%d\n",m_impl->width,m_impl->height);
@@ -434,8 +434,6 @@ void PI_HAL::shutdown_display()
 bool PI_HAL::update_display()
 {
     SDL_Event event;
-    bool show_demo_window = false;
-    bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     while (SDL_PollEvent(&event))
@@ -693,26 +691,26 @@ void PI_HAL::unlock_main_context()
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-void set_width( int w )
+void PI_HAL::set_width( int w )
 {
     m_impl->width = w;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-void set_height( int h )
+void PI_HAL::set_height( int h )
 {
     m_impl->height = h;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-void set_fullscreen( bool b )
+void PI_HAL::set_fullscreen( bool b )
 {
     m_impl->fullscreen = b;
 }
 
-void set_vsync( bool b )
+void PI_HAL::set_vsync( bool b )
 {
     m_impl->vsync = b;
 }

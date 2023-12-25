@@ -93,8 +93,8 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
         uint8_t quality = 8;//0 - 63
         int8_t brightness = 0;//-2 - 2
         int8_t contrast = 0;//-2 - 2
-        int8_t saturation = 0;//-2 - 2
-        int8_t sharpness = -1;//-1 - 6
+        int8_t saturation = 1;//-2 - 2
+        int8_t sharpness = 3;//-1 - 6
         uint8_t denoise = 0;
         uint8_t special_effect = 0;//0 - 6
         bool awb = true;

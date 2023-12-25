@@ -321,12 +321,8 @@ int run(char* argv[])
     fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
 
     s_comms_thread = std::thread(&comms_thread_proc);
-    Ground2Air_Config_Packet config=s_ground2air_config_packet;
-    config.wifi_rate = WIFI_Rate::RATE_G_18M_ODFM;//RATE_G_18M_ODFM;
 
-    config.camera.resolution = Resolution::QVGA;
-    config.camera.fps_limit = 0;
-    config.camera.quality = 8;
+    Ground2Air_Config_Packet config=s_ground2air_config_packet;
 
     size_t video_frame_count = 0;
 
@@ -336,6 +332,7 @@ int run(char* argv[])
 
     auto f = [&config,&argv]{
 
+        ImGui::SetNextWindowCollapsed(true, ImGuiCond_Once); 
         ImGui::Begin("HAL");
         {
             {
@@ -476,6 +473,8 @@ int main(int argc, const char* argv[])
     Comms::TX_Descriptor tx_descriptor;
     tx_descriptor.interface = "wlan0mon";
 
+    s_hal.reset(new PI_HAL());
+
     {
         char *temp = getenv("ESPVTX_WIFI_CHN");
         if(temp){
@@ -485,13 +484,19 @@ int main(int argc, const char* argv[])
         }
     }
 
+    Ground2Air_Config_Packet config=s_ground2air_config_packet;
+    config.wifi_rate = WIFI_Rate::RATE_G_18M_ODFM;
+    config.camera.resolution = Resolution::VGA;
+    config.camera.fps_limit = 30;
+    config.camera.quality = 8;
+
     for(int i=1;i<argc;++i){
         auto temp = std::string(argv[i]);
         auto next = i!=argc-1? std::string(argv[i+1]):std::string("");
         auto check_argval = [&next](std::string arg_name){
             if(next==""){throw std::string("please input correct ")+arg_name;}
         };
-        if(temp=="--tx"){
+        if(temp=="-tx"){
             check_argval("tx");
             tx_descriptor.interface = next; 
             i++;
@@ -501,45 +506,53 @@ int main(int argc, const char* argv[])
             i++;
         }else if(temp=="-k"){
             check_argval("k");
-            rx_descriptor.coding_k = std::stoi(next);
             s_ground2air_config_packet.fec_codec_k =  std::stoi(next);
             i++;
             LOGI("set rx fec_k to {}",rx_descriptor.coding_k);
         }else if(temp=="-n"){
             check_argval("n");
-            rx_descriptor.coding_n = std::stoi(next);
             s_ground2air_config_packet.fec_codec_n =  std::stoi(next);
             i++;
             LOGI("set rx fec_n to {}",rx_descriptor.coding_n);
-        }else if(temp=="--rx"){
+        }else if(temp=="-rx"){
             rx_descriptor.interfaces.clear();
-        }else if(temp=="--ch"){
+        }else if(temp=="-ch"){
             check_argval("ch");
             s_groundstation_config.wifi_channel = std::stoi(next);
-        }else if(temp=="--w"){
+            i++;
+        }else if(temp=="-w"){
             check_argval("w");
-            s_hal.set_width(std::stoi(next));
-        }else if(temp=="--h"){
+            s_hal->set_width(std::stoi(next));
+            i++;
+        }else if(temp=="-h"){
             check_argval("h");
-            s_hal.set_height(std::stoi(next));
-        }else if(temp=="--fullscreen"){
+            s_hal->set_height(std::stoi(next));
+            i++;
+        }else if(temp=="-fullscreen"){
             check_argval("fullscreen");
-            s_hal.set_fullscreen(std::stoi(next) > 0);
-        }else if(temp=="--vsync"){
+            s_hal->set_fullscreen(std::stoi(next) > 0);
+            i++;
+        }else if(temp=="-vsync"){
             check_argval("vsync");
-            s_hal.set_fullscreen(std::stoi(next) > 0);
+            s_hal->set_vsync(std::stoi(next) > 0);
+            i++;
+        }else if(temp=="-sm"){
+            check_argval("sm");
+            rx_descriptor.skip_mon_mode_cfg = std::stoi(next) > 0;
+            i++;
         }else if(temp=="-help"){
             printf("gs -option val -option val\n");
             printf("-rx <rx_interface1> <rx_interface2>, default: wlan0mon single interface\n");
             printf("-tx <tx_interface>, default: wlan0mon\n");
             printf("-p <gd_ip>, default: disabled\n");
-            printf("-k <rx_fec_k>, default: 12\n");
-            printf("-n <rx_fec_n>, default: 20\n");
+            printf("-k <rx_fec_k>, default: 2\n");
+            printf("-n <rx_fec_n>, default: 3\n");
             printf("-ch <wifi_channel>, default: 11\n");
-            printf("-w <width>, default: 800\n");
-            printf("-h <width>, default: 600\n");
+            printf("-w <width>, default: 1280\n");
+            printf("-h <width>, default: 720\n");
             printf("-fullscreen <1/0>, default: 1\n");
             printf("-vsync <1/0>, default: 1\n");
+            printf("-sm <1/0>, skip configuring monitor mode, default: 0\n");
             printf("-help\n");
             return 0;
         }else{
@@ -555,7 +568,6 @@ int main(int argc, const char* argv[])
     tx_descriptor.coding_n = 6;
     tx_descriptor.mtu = GROUND2AIR_DATA_MAX_SIZE;
 
-    s_hal.reset(new PI_HAL());
     if (!s_hal->init())
         return -1;
 
