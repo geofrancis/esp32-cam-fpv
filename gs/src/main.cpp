@@ -40,6 +40,55 @@ Changed on the PI:
 
 */
 
+const char* resolutionName[] =
+{
+    "320x240",
+    "400x296",
+    "480x320",
+    "640x480",
+    "800x600",
+    "1024x768",
+    "1280x1024",
+    "1600x1200"
+};
+
+const char* rateName[] =
+{
+    "2M_L",
+    "2M_S",
+    "5M_L",
+    "5M_S",
+    "11M_L",
+    "11M_S",
+
+    "6M",
+    "9M",
+    "12M",
+    "18M",
+    "24M",
+    "36M",
+    "48M",
+    "54M",
+
+    "MCS0_LGI",
+    "MCS0_SGI",
+    "MCS1_LGI",
+    "MCS1_SGI",
+    "MCS2_LGI",
+    "MCS2_SGI",
+    "MCS3_LGI",
+    "MCS3_SGI",
+    "MCS4_LGI",
+    "MCS4_SGI",
+    "MCS5_LGI",
+
+    "MCS5_SGI",
+    "MCS6_LGI",
+    "MCS6_SGI",
+    "MCS7_LGI",
+    "MCS7_SGI",
+};
+
 std::unique_ptr<IHAL> s_hal;
 Comms s_comms;
 Video_Decoder s_decoder;
@@ -69,7 +118,11 @@ struct{
     std::mutex record_mutex;
     int wifi_channel;
 }s_groundstation_config;
+
 float video_fps = 0;
+int s_min_rssi = 0;
+int s_total_data = 0;
+
 static void comms_thread_proc()
 {
     Clock::time_point last_stats_tp = Clock::now();
@@ -117,6 +170,9 @@ static void comms_thread_proc()
                 std::chrono::duration_cast<std::chrono::milliseconds>(ping_min).count(),
                 std::chrono::duration_cast<std::chrono::milliseconds>(ping_max).count(),
                 std::chrono::duration_cast<std::chrono::milliseconds>(ping_avg).count() / ping_count,video_fps);
+
+            s_min_rssi = min_rssi;
+            s_total_data = total_data;
 
             ping_min = std::chrono::seconds(999);
             ping_max = std::chrono::seconds(0);
@@ -332,8 +388,11 @@ int run(char* argv[])
 
     auto f = [&config,&argv]{
 
+        char buf[256];
+        sprintf(buf, "RSSI:%d FPS:%1.0f DATA:%dKB %s %s###HAL", s_min_rssi, video_fps, s_total_data/1024, resolutionName[(int)config.camera.resolution], rateName[(int)config.wifi_rate]);
+
         ImGui::SetNextWindowCollapsed(true, ImGuiCond_Once); 
-        ImGui::Begin("HAL");
+        ImGui::Begin(buf);
         {
             {
                 int value = config.wifi_power;
@@ -508,12 +567,12 @@ int main(int argc, const char* argv[])
             check_argval("k");
             s_ground2air_config_packet.fec_codec_k =  std::stoi(next);
             i++;
-            LOGI("set rx fec_k to {}",rx_descriptor.coding_k);
+            LOGI("set rx fec_k to {}",s_ground2air_config_packet.fec_codec_k);
         }else if(temp=="-n"){
             check_argval("n");
             s_ground2air_config_packet.fec_codec_n =  std::stoi(next);
             i++;
-            LOGI("set rx fec_n to {}",rx_descriptor.coding_n);
+            LOGI("set rx fec_n to {}",s_ground2air_config_packet.fec_codec_n);
         }else if(temp=="-rx"){
             rx_descriptor.interfaces.clear();
         }else if(temp=="-ch"){
