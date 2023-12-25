@@ -31,6 +31,7 @@ public:
         uint32_t coding_k = 12;
         uint32_t coding_n = 20;
         size_t mtu = 1200;
+        bool skip_mon_mode_cfg = false;
     };
 
     bool init(RX_Descriptor const& rx_descriptor, TX_Descriptor const& tx_descriptor);
@@ -51,7 +52,7 @@ public:
     struct TX;
 
 private:
-    bool prepare_pcap(std::string const& interface, PCap& pcap);
+    bool prepare_pcap(std::string const& interface, PCap& pcap, RX_Descriptor const& rx_descriptor);
 
     bool prepare_filter(PCap& pcap);
     void prepare_radiotap_header(size_t rate_hz);

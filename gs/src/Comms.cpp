@@ -576,7 +576,7 @@ bool Comms::process_rx_packet(PCap& pcap)
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-bool Comms::prepare_pcap(std::string const& interface, PCap& pcap)
+bool Comms::prepare_pcap(std::string const& interface, PCap& pcap, RX_Descriptor const& rx_descriptor)
 {
     LOGI("Opening interface {} in monitor mode", interface);
 
@@ -596,10 +596,13 @@ bool Comms::prepare_pcap(std::string const& interface, PCap& pcap)
         LOGE("Error setting pcap_set_promisc: {}", pcap_geterr(pcap.pcap));
         return false;
     }
-    if (pcap_set_rfmon(pcap.pcap, 1) < 0)
+    if (!rx_descriptor.skip_mon_mode_cfg)
     {
-        LOGE("Error setting pcap_set_rfmon: {}", pcap_geterr(pcap.pcap));
-        return false;
+        if (pcap_set_rfmon(pcap.pcap, 1) < 0)
+        {
+            LOGE("Error setting pcap_set_rfmon: {}", pcap_geterr(pcap.pcap));
+            return false;
+        }
     }
     if (pcap_set_timeout(pcap.pcap, -1) < 0)
     {
@@ -797,7 +800,7 @@ bool Comms::init(RX_Descriptor const& rx_descriptor, TX_Descriptor const& tx_des
     for (auto& interf: interfaces)
     {
         m_impl->pcaps[index] = std::make_unique<PCap>();
-        if (!prepare_pcap(interf, *m_impl->pcaps[index]))
+        if (!prepare_pcap(interf, *m_impl->pcaps[index], rx_descriptor))
             return false;
 
         m_impl->pcaps[index]->index = index;
