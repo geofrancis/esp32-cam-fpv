@@ -444,7 +444,7 @@ IRAM_ATTR void packet_received_cb(void* buf, wifi_promiscuous_pkt_type_t type)
 
 /////////////////////////////////////////////////////////////////////////
 
-static void handle_ground2air_config_packet(Ground2Air_Config_Packet& src)
+static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, bool forceCameraSettings)
 {
     Ground2Air_Config_Packet& dst = s_ground2air_config_packet;
     s_recv_ground2air_packet = true;
@@ -465,7 +465,8 @@ static void handle_ground2air_config_packet(Ground2Air_Config_Packet& src)
             init_fec_codec(s_fec_encoder,src.fec_codec_k,src.fec_codec_n,src.fec_codec_mtu,true);
         }
     }
-    if (dst.camera.resolution != src.camera.resolution)
+
+    if (forceCameraSettings || (dst.camera.resolution != src.camera.resolution))
     {
         LOG("Camera resolution changed from %d to %d\n", (int)dst.camera.resolution, (int)src.camera.resolution);
         sensor_t* s = esp_camera_sensor_get();
@@ -491,7 +492,7 @@ static void handle_ground2air_config_packet(Ground2Air_Config_Packet& src)
     }
 
 #define APPLY(n1, n2, type) \
-    if (dst.camera.n1 != src.camera.n1) \
+    if (forceCameraSettings || (dst.camera.n1 != src.camera.n1)) \
     { \
         LOG("Camera " #n1 " from %d to %d\n", (int)dst.camera.n1, (int)src.camera.n1); \
         sensor_t* s = esp_camera_sensor_get(); \
@@ -526,6 +527,10 @@ static void handle_ground2air_config_packet(Ground2Air_Config_Packet& src)
     dst = src;
 }
 
+static void handle_ground2air_config_packet(Ground2Air_Config_Packet& src)
+{
+    handle_ground2air_config_packetEx(src, false);
+}
 
 IRAM_ATTR void send_air2ground_video_packet(bool last)
 {
@@ -697,8 +702,8 @@ static void init_camera()
     config.pin_reset = RESET_GPIO_NUM;
     config.xclk_freq_hz = 12000000;
     config.pixel_format = PIXFORMAT_JPEG;
-    config.frame_size = FRAMESIZE_SVGA;
-    config.jpeg_quality = 4;
+    config.frame_size = FRAMESIZE_VGA;
+    config.jpeg_quality = 8;
     config.fb_count = 2;
     config.grab_mode = CAMERA_GRAB_LATEST;
     config.fb_location = CAMERA_FB_IN_DRAM;
@@ -711,11 +716,6 @@ static void init_camera()
         LOG("Camera init failed with error 0x%x", err);
         return;
     }
-
-    sensor_t *s = esp_camera_sensor_get();
-    s->set_framesize(s, FRAMESIZE_HQVGA);
-    config.jpeg_quality = 12;
-    s->set_saturation(s, 0);
 }
 
 //#define SHOW_CPU_USAGE
@@ -805,8 +805,7 @@ extern "C" void app_main()
 
     initialize_status_led();
 
-    setup_wifi(s_ground2air_config_packet.wifi_rate, g_wifi_channel, 20.0f, packet_received_cb);
-    set_ground2air_config_packet_handler(handle_ground2air_config_packet);
+    setup_wifi(s_ground2air_config_packet.wifi_rate, g_wifi_channel, s_ground2air_config_packet.wifi_power, packet_received_cb);
 
     #ifdef DVR_SUPPORT
     init_sd();
@@ -850,6 +849,9 @@ extern "C" void app_main()
     init_camera();
     printf("MEMORY Before Loop: \n");
     heap_caps_print_heap_info(MALLOC_CAP_8BIT);
+
+    handle_ground2air_config_packetEx( s_ground2air_config_packet, true );
+    set_ground2air_config_packet_handler(handle_ground2air_config_packet);
 
     while (true)
     {
