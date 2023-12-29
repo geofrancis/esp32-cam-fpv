@@ -59,8 +59,11 @@ struct Ground2Air_Header
     uint8_t crc = 0;
 };
 
+constexpr size_t  GROUND2AIR_DATA_MAX_PAYLOAD_SIZE = GROUND2AIR_DATA_MAX_SIZE - sizeof(Ground2Air_Header);
+
 struct Ground2Air_Data_Packet : Ground2Air_Header
 {
+    uint8_t payload[GROUND2AIR_DATA_MAX_PAYLOAD_SIZE];
 };
 static_assert(sizeof(Ground2Air_Data_Packet) <= GROUND2AIR_DATA_MAX_SIZE, "");
 
@@ -142,6 +145,10 @@ struct Air2Ground_Video_Packet : Air2Ground_Header
     uint8_t last_part : 1;
     uint32_t frame_index = 0;
     //data follows
+};
+
+struct Air2Ground_Data_Packet : Air2Ground_Header
+{
 };
 
 static_assert(sizeof(Air2Ground_Video_Packet) == 13, "");

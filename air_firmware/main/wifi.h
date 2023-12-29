@@ -37,6 +37,7 @@ constexpr size_t WLAN_OUTGOING_BUFFER_SIZE = 60000;
 void setup_wifi(WIFI_Rate wifi_rate,uint8_t chn,float power_dbm,void (*packet_received_cb)(void* buf, wifi_promiscuous_pkt_type_t type));
 
 void set_ground2air_config_packet_handler(void (*handler)(Ground2Air_Config_Packet& src));
+void set_ground2air_data_packet_handler(void (*handler)(Ground2Air_Data_Packet& src));
 esp_err_t set_wifi_fixed_rate(WIFI_Rate value);
 esp_err_t set_wlan_power_dBm(float dBm);
 void setup_wifi_file_server(void);
@@ -52,6 +53,7 @@ struct Stats
     uint16_t video_frames = 0;
     uint32_t sd_data = 0;
     uint32_t sd_drops = 0;
+    uint32_t telemetry_data = 0;
 };
 
 extern Stats s_stats;
