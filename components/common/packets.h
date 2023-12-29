@@ -50,11 +50,11 @@ struct Ground2Air_Header
 {
     enum class Type : uint8_t
     {
-        Data,
+        Telemetry,
         Config,
     };
 
-    Type type = Type::Data; 
+    Type type = Type::Telemetry; 
     uint32_t size = 0;
     uint8_t crc = 0;
 };

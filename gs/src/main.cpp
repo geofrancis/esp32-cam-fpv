@@ -114,7 +114,7 @@ static Ground2Air_Config_Packet s_ground2air_config_packet;
 
 static std::mutex s_ground2air_data_packet_mutex;
 static Ground2Air_Data_Packet s_ground2air_data_packet;
-int s_comms = 0;
+int s_tlm_size = 0;
 
 #ifdef TEST_LATENCY
 static uint32_t s_test_latency_gpio_value = 0;
@@ -225,7 +225,7 @@ static void comms_thread_proc()
                     bytes = frb;
                 }
 
-                int n = read(fdUART, &(data.payload[s_tlm_size], bytes));
+                int n = read(fdUART, &(data.payload[s_tlm_size]), bytes);
 
                 if ( n >=0 )
                 {
@@ -240,14 +240,12 @@ static void comms_thread_proc()
                 )
             )
             {
-                data.ping = last_sent_ping; 
                 data.type = Ground2Air_Header::Type::Telemetry;
                 data.size = sizeof(Ground2Air_Header) + s_tlm_size;
                 data.crc = 0;
                 data.crc = crc8(0, &data, data.size); 
                 s_comms.send(&data, data.size, true);
                 last_data_sent_tp = Clock::now();
-                last_ping_sent_tp = Clock::now();
                 sent_count++;
                 s_tlm_size = 0;
             }
@@ -379,13 +377,13 @@ static void comms_thread_proc()
                     LOGE("Telemetry frame: data too big: {} > {}", packet_size, rx_data.size);
                     break;
                 }
-                if (packet_size < (sizeof(Air2Ground_Header_Packet) + 1))
+                if (packet_size < (sizeof(Air2Ground_Data_Packet) + 1))
                 {
-                    LOGE("Telemetry frame: data too small: {} > {}", packet_size, sizeof(Air2Ground_Header) + 1);
+                    LOGE("Telemetry frame: data too small: {} > {}", packet_size, sizeof(Air2Ground_Data_Packet) + 1);
                     break;
                 }
 
-                size_t payload_size = packet_size - sizeof(Air2Ground_Header);
+                size_t payload_size = packet_size - sizeof(Air2Ground_Data_Packet);
                 Air2Ground_Data_Packet& air2ground_data_packet = *(Air2Ground_Data_Packet*)rx_data.data.data();
                 uint8_t crc = air2ground_data_packet.crc;
                 air2ground_data_packet.crc = 0;
@@ -396,22 +394,11 @@ static void comms_thread_proc()
                     break;
                 }
 
-                if (air2ground_daa_packet.pong == last_sent_ping)
-                {
-                    last_sent_ping++;
-                    auto d = (Clock::now() - last_ping_sent_tp) / 2;
-                    ping_min = std::min(ping_min, d);
-                    ping_max = std::max(ping_max, d);
-                    ping_avg += d;
-                    ping_count++;
-                }
-
                 total_data += rx_data.size;
                 min_rssi = std::min(min_rssi, rx_data.rssi);
                 //LOGI("OK Telemetry frame {} - CRC OK {}. {}", payload_size, crc, rx_queue.size());
 
-                int payload_size = packet.size - sizeof(Air2Ground_Data_Packet);
-                write(fdUART, &(air2ground_data_packet.data[0]), sizeof(msg));
+                write(fdUART, ((uint8_t*)&air2ground_data_packet) + sizeof(Air2Ground_Data_Packet), payload_size);
             }
             else
             {
@@ -660,7 +647,7 @@ bool init_uart()
       return false;
     }
 
-    retrn true;
+    return true;
 }
 
 //===================================================================================
@@ -687,7 +674,7 @@ int main(int argc, const char* argv[])
         }
     }
 
-    Ground2Air_Config_Packet config=s_ground2air_config_packet;
+    Ground2Air_Config_Packet& config=s_ground2air_config_packet;
     config.wifi_rate = WIFI_Rate::RATE_G_18M_ODFM;
     config.camera.resolution = Resolution::VGA;
     config.camera.fps_limit = 30;
