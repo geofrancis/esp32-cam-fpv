@@ -23,6 +23,10 @@
 #include "imgui_impl_opengl3.h"
 #include "main.h"
 
+#include <unistd.h>
+#include <termios.h>
+#include <sys/ioctl.h>
+
 #include "socket.h"
 
 #ifdef TEST_LATENCY
@@ -93,6 +97,8 @@ std::unique_ptr<IHAL> s_hal;
 Comms s_comms;
 Video_Decoder s_decoder;
 
+int fdUART;
+
 /* This prints an "Assertion failed" message and aborts.  */
 void __assert_fail(const char* __assertion, const char* __file, unsigned int __line, const char* __function)
 {
@@ -105,6 +111,10 @@ static std::thread s_comms_thread;
 
 static std::mutex s_ground2air_config_packet_mutex;
 static Ground2Air_Config_Packet s_ground2air_config_packet;
+
+static std::mutex s_ground2air_data_packet_mutex;
+static Ground2Air_Data_Packet s_ground2air_data_packet;
+int s_comms = 0;
 
 #ifdef TEST_LATENCY
 static uint32_t s_test_latency_gpio_value = 0;
@@ -127,6 +137,7 @@ static void comms_thread_proc()
 {
     Clock::time_point last_stats_tp = Clock::now();
     Clock::time_point last_comms_sent_tp = Clock::now();
+    Clock::time_point last_data_sent_tp = Clock::now();
     uint8_t last_sent_ping = 0;
     Clock::time_point last_ping_sent_tp = Clock::now();
     Clock::duration ping_min = std::chrono::seconds(999);
@@ -199,6 +210,49 @@ static void comms_thread_proc()
             sent_count++;
         }
 
+        {
+            int bytes;
+            ioctl(fdUART, FIONREAD, &bytes);
+
+            std::lock_guard<std::mutex> lg(s_ground2air_data_packet_mutex);
+            auto& data = s_ground2air_data_packet;
+
+            if ( bytes > 0 )
+            {   
+                int frb = GROUND2AIR_DATA_MAX_PAYLOAD_SIZE - s_tlm_size;
+                if ( bytes > frb )
+                {
+                    bytes = frb;
+                }
+
+                int n = read(fdUART, &(data.payload[s_tlm_size], bytes));
+
+                if ( n >=0 )
+                {
+                    s_tlm_size += n;
+                }
+            }
+
+            if ( 
+                (s_tlm_size == GROUND2AIR_DATA_MAX_PAYLOAD_SIZE) ||
+                ( 
+                    ( s_tlm_size > 0 ) && (Clock::now() - last_data_sent_tp >= std::chrono::milliseconds(50)) 
+                )
+            )
+            {
+                data.ping = last_sent_ping; 
+                data.type = Ground2Air_Header::Type::Telemetry;
+                data.size = sizeof(Ground2Air_Header) + s_tlm_size;
+                data.crc = 0;
+                data.crc = crc8(0, &data, data.size); 
+                s_comms.send(&data, data.size, true);
+                last_data_sent_tp = Clock::now();
+                last_ping_sent_tp = Clock::now();
+                sent_count++;
+                s_tlm_size = 0;
+            }
+        }
+
 #ifdef TEST_LATENCY
         if (s_test_latency_gpio_value == 0 && Clock::now() - s_test_latency_gpio_last_tp >= std::chrono::milliseconds(200))
         {
@@ -241,85 +295,131 @@ static void comms_thread_proc()
 
             //filter bad packets
             Air2Ground_Header& air2ground_header = *(Air2Ground_Header*)rx_data.data.data();
-            if (air2ground_header.type != Air2Ground_Header::Type::Video)
+
+            uint32_t packet_size = air2ground_header.size;
+            if (air2ground_header.type == Air2Ground_Header::Type::Video)
+            {
+                if (packet_size > rx_data.size)
+                {
+                    LOGE("Video frame {}: data too big: {} > {}", video_frame_index, packet_size, rx_data.size);
+                    break;
+                }
+                if (packet_size < sizeof(Air2Ground_Video_Packet))
+                {
+                    LOGE("Video frame {}: data too small: {} > {}", video_frame_index, packet_size, sizeof(Air2Ground_Video_Packet));
+                    break;
+                }
+
+                size_t payload_size = packet_size - sizeof(Air2Ground_Video_Packet);
+                Air2Ground_Video_Packet& air2ground_video_packet = *(Air2Ground_Video_Packet*)rx_data.data.data();
+                uint8_t crc = air2ground_video_packet.crc;
+                air2ground_video_packet.crc = 0;
+                uint8_t computed_crc = crc8(0, rx_data.data.data(), sizeof(Air2Ground_Video_Packet));
+                if (crc != computed_crc)
+                {
+                    LOGE("Video frame {}, {} {}: crc mismatch: {} != {}", air2ground_video_packet.frame_index, (int)air2ground_video_packet.part_index, payload_size, crc, computed_crc);
+                    break;
+                }
+
+                if (air2ground_video_packet.pong == last_sent_ping)
+                {
+                    last_sent_ping++;
+                    auto d = (Clock::now() - last_ping_sent_tp) / 2;
+                    ping_min = std::min(ping_min, d);
+                    ping_max = std::max(ping_max, d);
+                    ping_avg += d;
+                    ping_count++;
+                }
+
+                total_data += rx_data.size;
+                min_rssi = std::min(min_rssi, rx_data.rssi);
+                //LOGI("OK Video frame {}, {} {} - CRC OK {}. {}", air2ground_video_packet.frame_index, (int)air2ground_video_packet.part_index, payload_size, crc, rx_queue.size());
+
+                if ((air2ground_video_packet.frame_index + 200u < video_frame_index) ||                 //frame from the distant past? TX was restarted
+                    (air2ground_video_packet.frame_index > video_frame_index)) //frame from the future and we still have other frames enqueued? Stale data
+                {
+                    //if (video_next_part_index > 0) //incomplete frame
+                    //   s_decoder.decode_data(video_frame.data(), video_frame.size());
+
+                    //if (video_next_part_index > 0)
+                    //    LOGE("Aborting video frame {}, {}", video_frame_index, video_next_part_index);
+
+                    video_frame.clear();
+                    video_frame_index = air2ground_video_packet.frame_index;
+                    video_next_part_index = 0;
+                }
+                if (air2ground_video_packet.frame_index == video_frame_index && air2ground_video_packet.part_index == video_next_part_index)
+                {
+                    video_next_part_index++;
+                    size_t offset = video_frame.size();
+                    video_frame.resize(offset + payload_size);
+                    memcpy(video_frame.data() + offset, rx_data.data.data() + sizeof(Air2Ground_Video_Packet), payload_size);
+
+                    if (video_next_part_index > 0 && air2ground_video_packet.last_part != 0)
+                    {
+                        //LOGI("Received frame {}, {}, size {}", video_frame_index, video_next_part_index, video_frame.size());
+                        s_decoder.decode_data(video_frame.data(), video_frame.size());
+                        if(s_groundstation_config.record){
+                            std::lock_guard<std::mutex> lg(s_groundstation_config.record_mutex);
+                            fwrite(video_frame.data(),video_frame.size(),1,s_groundstation_config.record_file);
+                        }
+                        if(s_groundstation_config.socket_fd>0){
+                            send_data_to_udp(s_groundstation_config.socket_fd,video_frame.data(),video_frame.size());
+                        }
+                        video_next_part_index = 0;
+                        video_frame.clear();
+                    }
+                }
+
+            }
+            else if (air2ground_header.type == Air2Ground_Header::Type::Telemetry)
+            {
+                if (packet_size > rx_data.size)
+                {
+                    LOGE("Telemetry frame: data too big: {} > {}", packet_size, rx_data.size);
+                    break;
+                }
+                if (packet_size < (sizeof(Air2Ground_Header_Packet) + 1))
+                {
+                    LOGE("Telemetry frame: data too small: {} > {}", packet_size, sizeof(Air2Ground_Header) + 1);
+                    break;
+                }
+
+                size_t payload_size = packet_size - sizeof(Air2Ground_Header);
+                Air2Ground_Data_Packet& air2ground_data_packet = *(Air2Ground_Data_Packet*)rx_data.data.data();
+                uint8_t crc = air2ground_data_packet.crc;
+                air2ground_data_packet.crc = 0;
+                uint8_t computed_crc = crc8(0, rx_data.data.data(), packet_size);
+                if (crc != computed_crc)
+                {
+                    LOGE("Telemetry frame: crc mismatch {}: {} != {}", payload_size, crc, computed_crc);
+                    break;
+                }
+
+                if (air2ground_daa_packet.pong == last_sent_ping)
+                {
+                    last_sent_ping++;
+                    auto d = (Clock::now() - last_ping_sent_tp) / 2;
+                    ping_min = std::min(ping_min, d);
+                    ping_max = std::max(ping_max, d);
+                    ping_avg += d;
+                    ping_count++;
+                }
+
+                total_data += rx_data.size;
+                min_rssi = std::min(min_rssi, rx_data.rssi);
+                //LOGI("OK Telemetry frame {} - CRC OK {}. {}", payload_size, crc, rx_queue.size());
+
+                int payload_size = packet.size - sizeof(Air2Ground_Data_Packet);
+                write(fdUART, &(air2ground_data_packet.data[0]), sizeof(msg));
+            }
+            else
             {
                 LOGE("Unknown air packet: {}", air2ground_header.type);
                 break;
             }
 
-            uint32_t video_packet_size = air2ground_header.size;
-            if (video_packet_size > rx_data.size)
-            {
-                LOGE("Video frame {}: data too big: {} > {}", video_frame_index, video_packet_size, rx_data.size);
-                break;
-            }
 
-            if (video_packet_size < sizeof(Air2Ground_Video_Packet))
-            {
-                LOGE("Video frame {}: data too small: {} > {}", video_frame_index, video_packet_size, sizeof(Air2Ground_Video_Packet));
-                break;
-            }
-
-            size_t payload_size = video_packet_size - sizeof(Air2Ground_Video_Packet);
-            Air2Ground_Video_Packet& air2ground_video_packet = *(Air2Ground_Video_Packet*)rx_data.data.data();
-            uint8_t crc = air2ground_video_packet.crc;
-            air2ground_video_packet.crc = 0;
-            uint8_t computed_crc = crc8(0, rx_data.data.data(), sizeof(Air2Ground_Video_Packet));
-            if (crc != computed_crc)
-            {
-                LOGE("Video frame {}, {} {}: crc mismatch: {} != {}", air2ground_video_packet.frame_index, (int)air2ground_video_packet.part_index, payload_size, crc, computed_crc);
-                break;
-            }
-
-            if (air2ground_video_packet.pong == last_sent_ping)
-            {
-                last_sent_ping++;
-                auto d = (Clock::now() - last_ping_sent_tp) / 2;
-                ping_min = std::min(ping_min, d);
-                ping_max = std::max(ping_max, d);
-                ping_avg += d;
-                ping_count++;
-            }
-
-            total_data += rx_data.size;
-            min_rssi = std::min(min_rssi, rx_data.rssi);
-            //LOGI("OK Video frame {}, {} {} - CRC OK {}. {}", air2ground_video_packet.frame_index, (int)air2ground_video_packet.part_index, payload_size, crc, rx_queue.size());
-
-            if ((air2ground_video_packet.frame_index + 200 < video_frame_index) ||                 //frame from the distant past? TX was restarted
-                (air2ground_video_packet.frame_index > video_frame_index)) //frame from the future and we still have other frames enqueued? Stale data
-            {
-                //if (video_next_part_index > 0) //incomplete frame
-                //   s_decoder.decode_data(video_frame.data(), video_frame.size());
-
-                //if (video_next_part_index > 0)
-                //    LOGE("Aborting video frame {}, {}", video_frame_index, video_next_part_index);
-
-                video_frame.clear();
-                video_frame_index = air2ground_video_packet.frame_index;
-                video_next_part_index = 0;
-            }
-            if (air2ground_video_packet.frame_index == video_frame_index && air2ground_video_packet.part_index == video_next_part_index)
-            {
-                video_next_part_index++;
-                size_t offset = video_frame.size();
-                video_frame.resize(offset + payload_size);
-                memcpy(video_frame.data() + offset, rx_data.data.data() + sizeof(Air2Ground_Video_Packet), payload_size);
-
-                if (video_next_part_index > 0 && air2ground_video_packet.last_part != 0)
-                {
-                    //LOGI("Received frame {}, {}, size {}", video_frame_index, video_next_part_index, video_frame.size());
-                    s_decoder.decode_data(video_frame.data(), video_frame.size());
-                    if(s_groundstation_config.record){
-                        std::lock_guard<std::mutex> lg(s_groundstation_config.record_mutex);
-                        fwrite(video_frame.data(),video_frame.size(),1,s_groundstation_config.record_file);
-                    }
-                    if(s_groundstation_config.socket_fd>0){
-                        send_data_to_udp(s_groundstation_config.socket_fd,video_frame.data(),video_frame.size());
-                    }
-                    video_next_part_index = 0;
-                    video_frame.clear();
-                }
-            }
         } 
         while (false);
 #endif
@@ -521,6 +621,50 @@ int run(char* argv[])
     return 0;
 }
 
+bool init_uart()
+{
+
+    fdUART = open("/dev/ttyUSB0", O_RDWR);
+
+    struct termios tty;
+    if(tcgetattr(fdUART, &tty) != 0) 
+    {
+      printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
+      return false;
+    }
+
+    tty.c_cflag &= ~PARENB;
+    tty.c_cflag &= ~CSTOPB;
+    tty.c_cflag &= ~CSIZE;
+    tty.c_cflag |= CS8;
+    tty.c_cflag &= ~CRTSCTS;
+    tty.c_cflag |= CREAD | CLOCAL;
+    tty.c_lflag &= ~ICANON;
+    tty.c_lflag &= ~ECHO;
+    tty.c_lflag &= ~ECHOE;
+    tty.c_lflag &= ~ECHONL;
+    tty.c_lflag &= ~ISIG;
+    tty.c_iflag &= ~(IXON | IXOFF | IXANY);
+    tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP|INLCR|IGNCR|ICRNL);
+    tty.c_oflag &= ~OPOST;
+    tty.c_oflag &= ~ONLCR;
+    tty.c_cc[VTIME] = 0;
+    tty.c_cc[VMIN] = 0;
+    
+    cfsetispeed(&tty, B1152000);
+    cfsetospeed(&tty, B1152000);
+  
+    if (tcsetattr(fdUART, TCSANOW, &tty) != 0) 
+    {
+      printf("Error %i from tcsetattr: %s\n", errno, strerror(errno));
+      return false;
+    }
+
+    retrn true;
+}
+
+//===================================================================================
+//===================================================================================
 int main(int argc, const char* argv[])
 {
 
@@ -626,6 +770,11 @@ int main(int argc, const char* argv[])
     tx_descriptor.coding_k = 2;
     tx_descriptor.coding_n = 6;
     tx_descriptor.mtu = GROUND2AIR_DATA_MAX_SIZE;
+
+    if ( !init_uart())
+    {
+        return -1;
+    }
 
     if (!s_hal->init())
         return -1;

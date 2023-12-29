@@ -24,6 +24,7 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "driver/uart.h"
 
 #include "fec_codec.h"
 #include "packets.h"
@@ -59,7 +60,11 @@ static int64_t s_video_target_frame_dt = 0;
 
 /////////////////////////////////////////////////////////////////////////
 
+#ifdef UART_MAVLINK
+static int s_uart_verbose = 0;
+#else
 static int s_uart_verbose = 1;
+#endif
 
 #define LOG(...) do { if (s_uart_verbose > 0) SAFE_PRINTF(__VA_ARGS__); } while (false) 
 
@@ -103,6 +108,16 @@ IRAM_ATTR void update_status_led()
 
 //////////////////////////////////////////////////////////////////////////////
 static bool s_recv_ground2air_packet = false;
+
+SemaphoreHandle_t s_serial_mux = xSemaphoreCreateBinary();
+
+auto _init_result2 = []() -> bool
+{
+  xSemaphoreGive(s_serial_mux);
+  return true;
+}();
+
+
 #ifdef DVR_SUPPORT
 
 SemaphoreHandle_t s_sd_fast_buffer_mux = xSemaphoreCreateBinary();
@@ -444,7 +459,7 @@ IRAM_ATTR void packet_received_cb(void* buf, wifi_promiscuous_pkt_type_t type)
 
 /////////////////////////////////////////////////////////////////////////
 
-static void handle_ground2air_config_packet(Ground2Air_Config_Packet& src)
+static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, bool forceCameraSettings)
 {
     Ground2Air_Config_Packet& dst = s_ground2air_config_packet;
     s_recv_ground2air_packet = true;
@@ -465,7 +480,8 @@ static void handle_ground2air_config_packet(Ground2Air_Config_Packet& src)
             init_fec_codec(s_fec_encoder,src.fec_codec_k,src.fec_codec_n,src.fec_codec_mtu,true);
         }
     }
-    if (dst.camera.resolution != src.camera.resolution)
+
+    if (forceCameraSettings || (dst.camera.resolution != src.camera.resolution))
     {
         LOG("Camera resolution changed from %d to %d\n", (int)dst.camera.resolution, (int)src.camera.resolution);
         sensor_t* s = esp_camera_sensor_get();
@@ -491,7 +507,7 @@ static void handle_ground2air_config_packet(Ground2Air_Config_Packet& src)
     }
 
 #define APPLY(n1, n2, type) \
-    if (dst.camera.n1 != src.camera.n1) \
+    if (forceCameraSettings || (dst.camera.n1 != src.camera.n1)) \
     { \
         LOG("Camera " #n1 " from %d to %d\n", (int)dst.camera.n1, (int)src.camera.n1); \
         sensor_t* s = esp_camera_sensor_get(); \
@@ -526,6 +542,32 @@ static void handle_ground2air_config_packet(Ground2Air_Config_Packet& src)
     dst = src;
 }
 
+//===========================================================================================
+//===========================================================================================
+static void handle_ground2air_config_packet(Ground2Air_Config_Packet& src)
+{
+    handle_ground2air_config_packetEx(src, false);
+}
+
+//===========================================================================================
+//===========================================================================================
+static void handle_ground2air_data_packet(Ground2Air_Data_Packet& src)
+{
+#ifdef UART_MAVLINK
+    xSemaphoreTake(s_serial_mux, portMAX_DELAY);
+
+    int s = src.size - sizeof(Ground2Air_Header);
+    size_t freeSize = 0;
+
+    ESP_ERROR_CHECK( uart_get_tx_buffer_free_size(UART_NUM_0, &freeSize) );
+    if ( freeSize >= s )
+    {
+        uart_write_bytes(UART_NUM_0, ((uint8_t*)&src) + sizeof(Ground2Air_Header), s);
+    }
+
+    xSemaphoreGive(s_serial_mux);
+#endif
+}
 
 IRAM_ATTR void send_air2ground_video_packet(bool last)
 {
@@ -550,6 +592,33 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
     packet.pong = s_ground2air_config_packet.ping;
     packet.crc = 0;
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_Video_Packet));
+    if (!s_fec_encoder.flush_encode_packet(true))
+    {
+        LOG("Fec codec busy\n");
+        s_stats.wlan_error_count++;
+    }
+}
+
+IRAM_ATTR void send_air2ground_data_packet()
+{
+    uint8_t* packet_data = s_fec_encoder.get_encode_packet_data(true);
+
+    if(!packet_data){
+        LOG("no data buf!\n");
+        return ;
+    }
+
+    Air2Ground_Data_Packet& packet = *(Air2Ground_Data_Packet*)packet_data;
+    packet.type = Air2Ground_Header::Type::Telemetry;
+    packet.size = 128 + sizeof(Air2Ground_Data_Packet);
+    packet.pong = s_ground2air_config_packet.ping;
+    packet.crc = 0;
+    packet.crc = crc8(0, &packet, sizeof(Air2Ground_Data_Packet));
+
+    s_stats.telemetry_data += 128;
+
+    ESP_ERROR_CHECK( uart_read_bytes(UART_NUM_0, packet_data + sizeof(Air2Ground_Data_Packet), 128, 100));
+
     if (!s_fec_encoder.flush_encode_packet(true))
     {
         LOG("Fec codec busy\n");
@@ -697,8 +766,8 @@ static void init_camera()
     config.pin_reset = RESET_GPIO_NUM;
     config.xclk_freq_hz = 12000000;
     config.pixel_format = PIXFORMAT_JPEG;
-    config.frame_size = FRAMESIZE_SVGA;
-    config.jpeg_quality = 4;
+    config.frame_size = FRAMESIZE_VGA;
+    config.jpeg_quality = 8;
     config.fb_count = 2;
     config.grab_mode = CAMERA_GRAB_LATEST;
     config.fb_location = CAMERA_FB_IN_DRAM;
@@ -711,11 +780,6 @@ static void init_camera()
         LOG("Camera init failed with error 0x%x", err);
         return;
     }
-
-    sensor_t *s = esp_camera_sensor_get();
-    s->set_framesize(s, FRAMESIZE_HQVGA);
-    config.jpeg_quality = 12;
-    s->set_saturation(s, 0);
 }
 
 //#define SHOW_CPU_USAGE
@@ -795,6 +859,20 @@ extern "C" void app_main()
     printf("MEMORY at start: \n");
     heap_caps_print_heap_info(MALLOC_CAP_8BIT);
 
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .rx_flow_ctrl_thresh = 122,
+        .source_clk = UART_SCLK_APB
+    };  
+    // Configure UART parameters
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config) );
+
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 256, 0, NULL, 0));
+
     nvs_args_init();
     g_wifi_channel = (uint16_t)nvs_args_read("channel");
     if(g_wifi_channel > 13){
@@ -805,8 +883,7 @@ extern "C" void app_main()
 
     initialize_status_led();
 
-    setup_wifi(s_ground2air_config_packet.wifi_rate, g_wifi_channel, 20.0f, packet_received_cb);
-    set_ground2air_config_packet_handler(handle_ground2air_config_packet);
+    setup_wifi(s_ground2air_config_packet.wifi_rate, g_wifi_channel, s_ground2air_config_packet.wifi_power, packet_received_cb);
 
     #ifdef DVR_SUPPORT
     init_sd();
@@ -851,14 +928,18 @@ extern "C" void app_main()
     printf("MEMORY Before Loop: \n");
     heap_caps_print_heap_info(MALLOC_CAP_8BIT);
 
+    handle_ground2air_config_packetEx( s_ground2air_config_packet, true );
+    set_ground2air_config_packet_handler(handle_ground2air_config_packet);
+    set_ground2air_data_packet_handler(handle_ground2air_data_packet);
+
     while (true)
     {
         if (s_uart_verbose > 0 && millis() - s_stats_last_tp >= 1000)
         {
             s_stats_last_tp = millis();
-            LOG("WLAN S: %d, R: %d, E: %d, D: %d, %%: %d || FPS: %d, D: %d || D: %d, E: %d\n",
+            LOG("WLAN S: %d, R: %d, E: %d, D: %d, %%: %d || FPS: %d, D: %d || D: %d, E: %d || TO: %d\n",
                 s_stats.wlan_data_sent, s_stats.wlan_data_received, s_stats.wlan_error_count, s_stats.wlan_received_packets_dropped, s_wlan_outgoing_queue.size() * 100 / s_wlan_outgoing_queue.capacity(),
-                (int)s_stats.video_frames, s_stats.video_data, s_stats.sd_data, s_stats.sd_drops);
+                (int)s_stats.video_frames, s_stats.video_data, s_stats.sd_data, s_stats.sd_drops, s_stats.telemetry_data);
             print_cpu_usage();
 
             s_stats = Stats();
@@ -868,7 +949,29 @@ extern "C" void app_main()
         esp_task_wdt_reset();
 
         update_status_led();
+
+#ifdef UART_MAVLINK
+        xSemaphoreTake(s_serial_mux, portMAX_DELAY);
+
+        while ( true )
+        {
+            size_t rs = 0;
+            ESP_ERROR_CHECK( uart_get_buffered_data_len(UART_NUM_0, &rs) );
+            if (rs >= 128)  // or timeout ....
+            {
+                send_air2ground_data_packet();
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        xSemaphoreGive(s_serial_mux);
+#endif
+
     }
+
 }
 
 /*

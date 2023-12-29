@@ -82,7 +82,17 @@
 			"__tree": "cpp",
 			"map": "cpp",
 			"set": "cpp",
-			"condition_variable": "cpp"
+			"condition_variable": "cpp",
+			"*.tcc": "cpp",
+			"compare": "cpp",
+			"concepts": "cpp",
+			"memory_resource": "cpp",
+			"numeric": "cpp",
+			"random": "cpp",
+			"numbers": "cpp",
+			"semaphore": "cpp",
+			"stop_token": "cpp",
+			"cinttypes": "cpp"
 		}
 	}
 }

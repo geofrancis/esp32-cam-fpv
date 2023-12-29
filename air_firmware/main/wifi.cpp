@@ -17,13 +17,25 @@ TaskHandle_t s_wifi_rx_task = nullptr;
 Stats s_stats;
 
 static void (*ground2air_config_packet_handler)(Ground2Air_Config_Packet& src)=nullptr;
+static void (*ground2air_data_packet_handler)(Ground2Air_Data_Packet& src)=nullptr;
 WIFI_Rate s_wlan_rate = s_ground2air_config_packet.wifi_rate;
 float s_wlan_power_dBm = s_ground2air_config_packet.wifi_power;
 
+//===========================================================================================
+//===========================================================================================
 void set_ground2air_config_packet_handler(void (*handler)(Ground2Air_Config_Packet& src)){
     ground2air_config_packet_handler=handler;
 }
 
+//===========================================================================================
+//===========================================================================================
+void set_ground2air_data_packet_handler(void (*handler)(Ground2Air_Data_Packet& src)){
+    ground2air_data_packet_handler=handler;
+}
+
+
+//===========================================================================================
+//===========================================================================================
 IRAM_ATTR void add_to_wlan_incoming_queue(const void* data, size_t size)
 {
     Wlan_Incoming_Packet packet;
@@ -177,7 +189,9 @@ IRAM_ATTR static void wifi_rx_proc(void *)
                             switch (header.type)
                             {
                                 case Ground2Air_Header::Type::Data:
-                                    //handle_ground2air_data_packet(*(Ground2Air_Data_Packet*)packet.ptr);
+                                    if(ground2air_data_packet_handler){
+                                        ground2air_data_packet_handler(*(Ground2Air_Data_Packet*)packet.ptr);
+                                    }
                                 break;
                                 case Ground2Air_Header::Type::Config:
                                     if(ground2air_config_packet_handler){
