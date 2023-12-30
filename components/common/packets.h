@@ -143,6 +143,8 @@ struct Air2Ground_Video_Packet : Air2Ground_Header
     Resolution resolution;
     uint8_t part_index : 7;
     uint8_t last_part : 1;
+    uint8_t wifi_queue;
+    WIFI_Rate curr_wifi_rate;
     uint32_t frame_index = 0;
     //data follows
 };
@@ -151,7 +153,7 @@ struct Air2Ground_Data_Packet : Air2Ground_Header
 {
 };
 
-static_assert(sizeof(Air2Ground_Video_Packet) == 13, "");
+static_assert(sizeof(Air2Ground_Video_Packet) == 15, "");
 
 ///////////////////////////////////////////////////////////////////////////////////////
 

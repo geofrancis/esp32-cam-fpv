@@ -74,23 +74,23 @@ const char* rateName[] =
     "48M",
     "54M",
 
-    "MCS0_LGI",
-    "MCS0_SGI",
-    "MCS1_LGI",
-    "MCS1_SGI",
-    "MCS2_LGI",
-    "MCS2_SGI",
-    "MCS3_LGI",
-    "MCS3_SGI",
-    "MCS4_LGI",
-    "MCS4_SGI",
-    "MCS5_LGI",
+    "MCS0_6.5M_L",
+    "MCS0_7.2M_S",
+    "MCS1_13M_L",
+    "MCS1_14.4M_S",
+    "MCS2_19.5M_L",
+    "MCS2_21.7M_S",
+    "MCS3_26.3M_L",
+    "MCS3_28.9M_S",
+    "MCS4_39M_L",
+    "MCS4_43.3M_S",
+    "MCS5_52M_L",
 
-    "MCS5_SGI",
-    "MCS6_LGI",
-    "MCS6_SGI",
-    "MCS7_LGI",
-    "MCS7_SGI",
+    "MCS5_57M_S",
+    "MCS6_58M_L",
+    "MCS6_65M_S",
+    "MCS7_65_L",
+    "MCS7_72_S"
 };
 
 std::unique_ptr<IHAL> s_hal;
@@ -133,6 +133,8 @@ float video_fps = 0;
 int s_min_rssi = 0;
 int s_total_data = 0;
 int s_lost_frame_count = 0;
+WIFI_Rate s_curr_wifi_rate = WIFI_Rate::RATE_B_2M_CCK;
+int s_wifi_queue = 0;
 
 static void comms_thread_proc()
 {
@@ -320,6 +322,9 @@ static void comms_thread_proc()
                     break;
                 }
 
+                s_curr_wifi_rate = air2ground_video_packet.curr_wifi_rate;
+                s_wifi_queue = air2ground_video_packet.wifi_queue;
+
                 if (air2ground_video_packet.pong == last_sent_ping)
                 {
                     last_sent_ping++;
@@ -490,7 +495,12 @@ int run(char* argv[])
     auto f = [&config,&argv]{
 
         char buf[256];
-        sprintf(buf, "RSSI:%d FPS:%1.0f/%d %dKB/S %s %s###HAL", s_min_rssi, video_fps, s_lost_frame_count, s_total_data/1024, resolutionName[(int)config.camera.resolution], rateName[(int)config.wifi_rate]);
+        sprintf(buf, "RSSI:%d FPS:%1.0f/%d %dKB/S %s %d%% %s/%s###HAL", 
+        s_min_rssi, video_fps, s_lost_frame_count, 
+        s_total_data/1024, 
+        resolutionName[(int)config.camera.resolution], 
+        s_wifi_queue,
+        rateName[(int)s_curr_wifi_rate], rateName[(int)config.wifi_rate]);
 
         ImGui::SetNextWindowCollapsed(true, ImGuiCond_Once); 
         ImGui::Begin(buf);
