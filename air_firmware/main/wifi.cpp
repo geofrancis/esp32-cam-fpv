@@ -188,7 +188,7 @@ IRAM_ATTR static void wifi_rx_proc(void *)
                         {
                             switch (header.type)
                             {
-                                case Ground2Air_Header::Type::Data:
+                                case Ground2Air_Header::Type::Telemetry:
                                     if(ground2air_data_packet_handler){
                                         ground2air_data_packet_handler(*(Ground2Air_Data_Packet*)packet.ptr);
                                     }

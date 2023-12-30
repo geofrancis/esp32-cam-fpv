@@ -844,7 +844,7 @@ static void print_cpu_usage()
 extern "C" void app_main()
 {
     Ground2Air_Data_Packet& ground2air_data_packet = s_ground2air_data_packet;
-    ground2air_data_packet.type = Ground2Air_Header::Type::Data;
+    ground2air_data_packet.type = Ground2Air_Header::Type::Telemetry;
     ground2air_data_packet.size = sizeof(ground2air_data_packet);
 
     Ground2Air_Config_Packet& ground2air_config_packet = s_ground2air_config_packet;
