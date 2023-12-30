@@ -132,6 +132,7 @@ struct{
 float video_fps = 0;
 int s_min_rssi = 0;
 int s_total_data = 0;
+int s_lost_frame_count = 0;
 
 static void comms_thread_proc()
 {
@@ -343,6 +344,19 @@ static void comms_thread_proc()
                     //    LOGE("Aborting video frame {}, {}", video_frame_index, video_next_part_index);
 
                     video_frame.clear();
+
+                    if ( video_next_part_index != 0 )
+                    {
+                        //not all parts are received, frame is lost
+                        s_lost_frame_count++;
+                    }
+
+                    int df = air2ground_video_packet.frame_index - video_frame_index;
+                    if ( df > 1)
+                    {
+                        s_lost_frame_count += df-1;
+                    }
+
                     video_frame_index = air2ground_video_packet.frame_index;
                     video_next_part_index = 0;
                 }
@@ -476,7 +490,7 @@ int run(char* argv[])
     auto f = [&config,&argv]{
 
         char buf[256];
-        sprintf(buf, "RSSI:%d FPS:%1.0f DATA:%dKB %s %s###HAL", s_min_rssi, video_fps, s_total_data/1024, resolutionName[(int)config.camera.resolution], rateName[(int)config.wifi_rate]);
+        sprintf(buf, "RSSI:%d FPS:%1.0f/%d %dKB/S %s %s###HAL", s_min_rssi, video_fps, s_lost_frame_count, s_total_data/1024, resolutionName[(int)config.camera.resolution], rateName[(int)config.wifi_rate]);
 
         ImGui::SetNextWindowCollapsed(true, ImGuiCond_Once); 
         ImGui::Begin(buf);
@@ -596,6 +610,7 @@ int run(char* argv[])
             last_stats_tp = Clock::now();
             video_fps = video_frame_count;
             video_frame_count = 0;
+            s_lost_frame_count = 0;
         }
 
         Clock::time_point now = Clock::now();
@@ -611,7 +626,7 @@ int run(char* argv[])
 bool init_uart()
 {
 
-    fdUART = open("/dev/ttyUSB0", O_RDWR);
+    fdUART = open("/dev/serial0", O_RDWR);
 
     struct termios tty;
     if(tcgetattr(fdUART, &tty) != 0) 
@@ -675,7 +690,7 @@ int main(int argc, const char* argv[])
     }
 
     Ground2Air_Config_Packet& config=s_ground2air_config_packet;
-    config.wifi_rate = WIFI_Rate::RATE_G_18M_ODFM;
+    config.wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
     config.camera.resolution = Resolution::VGA;
     config.camera.fps_limit = 30;
     config.camera.quality = 8;
@@ -736,7 +751,7 @@ int main(int argc, const char* argv[])
             printf("-tx <tx_interface>, default: wlan0mon\n");
             printf("-p <gd_ip>, default: disabled\n");
             printf("-k <rx_fec_k>, default: 2\n");
-            printf("-n <rx_fec_n>, default: 3\n");
+            printf("-n <rx_fec_n>, default: 6\n");
             printf("-ch <wifi_channel>, default: 11\n");
             printf("-w <width>, default: 1280\n");
             printf("-h <width>, default: 720\n");
