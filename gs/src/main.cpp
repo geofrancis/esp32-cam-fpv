@@ -44,6 +44,55 @@ Changed on the PI:
 
 */
 
+const char* resolutionName[] =
+{
+    "320x240",
+    "400x296",
+    "480x320",
+    "640x480",
+    "800x600",
+    "1024x768",
+    "1280x1024",
+    "1600x1200"
+};
+
+const char* rateName[] =
+{
+    "2M_L",
+    "2M_S",
+    "5M_L",
+    "5M_S",
+    "11M_L",
+    "11M_S",
+
+    "6M",
+    "9M",
+    "12M",
+    "18M",
+    "24M",
+    "36M",
+    "48M",
+    "54M",
+
+    "MCS0_LGI",
+    "MCS0_SGI",
+    "MCS1_LGI",
+    "MCS1_SGI",
+    "MCS2_LGI",
+    "MCS2_SGI",
+    "MCS3_LGI",
+    "MCS3_SGI",
+    "MCS4_LGI",
+    "MCS4_SGI",
+    "MCS5_LGI",
+
+    "MCS5_SGI",
+    "MCS6_LGI",
+    "MCS6_SGI",
+    "MCS7_LGI",
+    "MCS7_SGI",
+};
+
 std::unique_ptr<IHAL> s_hal;
 Comms s_comms;
 Video_Decoder s_decoder;
@@ -65,7 +114,7 @@ static Ground2Air_Config_Packet s_ground2air_config_packet;
 
 static std::mutex s_ground2air_data_packet_mutex;
 static Ground2Air_Data_Packet s_ground2air_data_packet;
-int s_comms = 0;
+int s_tlm_size = 0;
 
 #ifdef TEST_LATENCY
 static uint32_t s_test_latency_gpio_value = 0;
@@ -79,7 +128,11 @@ struct{
     std::mutex record_mutex;
     int wifi_channel;
 }s_groundstation_config;
+
 float video_fps = 0;
+int s_min_rssi = 0;
+int s_total_data = 0;
+
 static void comms_thread_proc()
 {
     Clock::time_point last_stats_tp = Clock::now();
@@ -129,6 +182,9 @@ static void comms_thread_proc()
                 std::chrono::duration_cast<std::chrono::milliseconds>(ping_max).count(),
                 std::chrono::duration_cast<std::chrono::milliseconds>(ping_avg).count() / ping_count,video_fps);
 
+            s_min_rssi = min_rssi;
+            s_total_data = total_data;
+
             ping_min = std::chrono::seconds(999);
             ping_max = std::chrono::seconds(0);
             ping_avg = std::chrono::seconds(0);
@@ -169,7 +225,7 @@ static void comms_thread_proc()
                     bytes = frb;
                 }
 
-                int n = read(fdUART, &(data.payload[s_tlm_size], bytes));
+                int n = read(fdUART, &(data.payload[s_tlm_size]), bytes);
 
                 if ( n >=0 )
                 {
@@ -184,14 +240,12 @@ static void comms_thread_proc()
                 )
             )
             {
-                data.ping = last_sent_ping; 
                 data.type = Ground2Air_Header::Type::Telemetry;
                 data.size = sizeof(Ground2Air_Header) + s_tlm_size;
                 data.crc = 0;
                 data.crc = crc8(0, &data, data.size); 
                 s_comms.send(&data, data.size, true);
                 last_data_sent_tp = Clock::now();
-                last_ping_sent_tp = Clock::now();
                 sent_count++;
                 s_tlm_size = 0;
             }
@@ -323,13 +377,13 @@ static void comms_thread_proc()
                     LOGE("Telemetry frame: data too big: {} > {}", packet_size, rx_data.size);
                     break;
                 }
-                if (packet_size < (sizeof(Air2Ground_Header_Packet) + 1))
+                if (packet_size < (sizeof(Air2Ground_Data_Packet) + 1))
                 {
-                    LOGE("Telemetry frame: data too small: {} > {}", packet_size, sizeof(Air2Ground_Header) + 1);
+                    LOGE("Telemetry frame: data too small: {} > {}", packet_size, sizeof(Air2Ground_Data_Packet) + 1);
                     break;
                 }
 
-                size_t payload_size = packet_size - sizeof(Air2Ground_Header);
+                size_t payload_size = packet_size - sizeof(Air2Ground_Data_Packet);
                 Air2Ground_Data_Packet& air2ground_data_packet = *(Air2Ground_Data_Packet*)rx_data.data.data();
                 uint8_t crc = air2ground_data_packet.crc;
                 air2ground_data_packet.crc = 0;
@@ -340,22 +394,11 @@ static void comms_thread_proc()
                     break;
                 }
 
-                if (air2ground_daa_packet.pong == last_sent_ping)
-                {
-                    last_sent_ping++;
-                    auto d = (Clock::now() - last_ping_sent_tp) / 2;
-                    ping_min = std::min(ping_min, d);
-                    ping_max = std::max(ping_max, d);
-                    ping_avg += d;
-                    ping_count++;
-                }
-
                 total_data += rx_data.size;
                 min_rssi = std::min(min_rssi, rx_data.rssi);
                 //LOGI("OK Telemetry frame {} - CRC OK {}. {}", payload_size, crc, rx_queue.size());
 
-                int payload_size = packet.size - sizeof(Air2Ground_Data_Packet);
-                write(fdUART, &(air2ground_data_packet.data[0]), sizeof(msg));
+                write(fdUART, ((uint8_t*)&air2ground_data_packet) + sizeof(Air2Ground_Data_Packet), payload_size);
             }
             else
             {
@@ -432,8 +475,11 @@ int run(char* argv[])
 
     auto f = [&config,&argv]{
 
+        char buf[256];
+        sprintf(buf, "RSSI:%d FPS:%1.0f DATA:%dKB %s %s###HAL", s_min_rssi, video_fps, s_total_data/1024, resolutionName[(int)config.camera.resolution], rateName[(int)config.wifi_rate]);
+
         ImGui::SetNextWindowCollapsed(true, ImGuiCond_Once); 
-        ImGui::Begin("HAL");
+        ImGui::Begin(buf);
         {
             {
                 int value = config.wifi_power;
@@ -601,7 +647,7 @@ bool init_uart()
       return false;
     }
 
-    retrn true;
+    return true;
 }
 
 //===================================================================================
@@ -628,7 +674,7 @@ int main(int argc, const char* argv[])
         }
     }
 
-    Ground2Air_Config_Packet config=s_ground2air_config_packet;
+    Ground2Air_Config_Packet& config=s_ground2air_config_packet;
     config.wifi_rate = WIFI_Rate::RATE_G_18M_ODFM;
     config.camera.resolution = Resolution::VGA;
     config.camera.fps_limit = 30;
@@ -652,12 +698,12 @@ int main(int argc, const char* argv[])
             check_argval("k");
             s_ground2air_config_packet.fec_codec_k =  std::stoi(next);
             i++;
-            LOGI("set rx fec_k to {}",rx_descriptor.coding_k);
+            LOGI("set rx fec_k to {}",s_ground2air_config_packet.fec_codec_k);
         }else if(temp=="-n"){
             check_argval("n");
             s_ground2air_config_packet.fec_codec_n =  std::stoi(next);
             i++;
-            LOGI("set rx fec_n to {}",rx_descriptor.coding_n);
+            LOGI("set rx fec_n to {}",s_ground2air_config_packet.fec_codec_n);
         }else if(temp=="-rx"){
             rx_descriptor.interfaces.clear();
         }else if(temp=="-ch"){

@@ -356,7 +356,7 @@ bool PI_HAL::init_display_sdl()
     ImVec2 display_size = get_display_size();
     ImGuiStyle& style = ImGui::GetStyle();
     style.ScrollbarSize = display_size.x / 80.f;
-    style.TouchExtraPadding = ImVec2(style.ScrollbarSize * 2.f, style.ScrollbarSize * 2.f);
+    //style.TouchExtraPadding = ImVec2(style.ScrollbarSize * 2.f, style.ScrollbarSize * 2.f);
     //style.ItemSpacing = ImVec2(size.x / 200, size.x / 200);
     style.ItemInnerSpacing = ImVec2(style.ItemSpacing.x / 2, style.ItemSpacing.y / 2);
     io.FontGlobalScale = 2.f;
