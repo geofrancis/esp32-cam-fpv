@@ -85,7 +85,7 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
     int8_t wifi_power = 20;//dBm
     WIFI_Rate wifi_rate = WIFI_Rate::RATE_G_48M_ODFM;
     uint8_t fec_codec_k = 2;
-    uint8_t fec_codec_n = 3;
+    uint8_t fec_codec_n = 6;
     uint16_t fec_codec_mtu = AIR2GROUND_MTU;
     bool dvr_record = false;
 

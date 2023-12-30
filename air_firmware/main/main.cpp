@@ -734,7 +734,7 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
                 send_air2ground_video_packet(true);
 
             s_video_frame_data_size = 0;
-            s_video_frame_index++;
+            if ( !s_video_skip_frame) s_video_frame_index++;
             s_video_part_index = 0;
         }
     }
