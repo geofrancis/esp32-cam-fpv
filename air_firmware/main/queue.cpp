@@ -3,6 +3,7 @@
 
 Queue s_wlan_incoming_queue;
 Queue s_wlan_outgoing_queue;
+size_t s_max_wlan_outgoing_queue_size = 0;
 
 IRAM_ATTR bool start_writing_wlan_outgoing_packet(Wlan_Outgoing_Packet& packet, size_t size)
 {

@@ -67,8 +67,18 @@ IRAM_ATTR void add_to_wlan_outgoing_queue(const void* data, size_t size)
         memcpy(packet.payload_ptr, data, size);
         //LOG("Sending packet of size %d\n", packet.size);
     }
+    else
+    {
+        s_stats.wlan_error_count++;
+    }
 
     end_writing_wlan_outgoing_packet(packet);
+
+    if ( s_max_wlan_outgoing_queue_size < s_wlan_outgoing_queue.size() )
+    {
+        s_max_wlan_outgoing_queue_size = s_wlan_outgoing_queue.size();
+    }
+
     xSemaphoreGive(s_wlan_outgoing_mux);
 
     //xSemaphoreGive(s_wifi_semaphore);
@@ -79,7 +89,11 @@ IRAM_ATTR void add_to_wlan_outgoing_queue(const void* data, size_t size)
 
 inline bool init_queues(size_t wlan_incoming_queue_size, size_t wlan_outgoing_queue_size)
 {
-  s_wlan_outgoing_queue.init(new uint8_t[wlan_outgoing_queue_size], wlan_outgoing_queue_size);
+  //SPI RAM is too slow, can not handle more then 2Mb/s bandwidth
+  //s_wlan_outgoing_queue.init(new uint8_t[wlan_outgoing_queue_size], wlan_outgoing_queue_size);
+  s_wlan_outgoing_queue.init( (uint8_t*)heap_caps_malloc(wlan_outgoing_queue_size, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL ),wlan_outgoing_queue_size );
+
+
   s_wlan_incoming_queue.init(new uint8_t[wlan_incoming_queue_size], wlan_incoming_queue_size);
 
   return true;
@@ -389,4 +403,18 @@ void setup_wifi_file_server(void)
 
     start_file_server("/sdcard");
 
+}
+
+uint8_t getMaxWlanOutgoingQueueUsage()
+{
+    size_t v;
+    size_t c;
+
+    xSemaphoreTake(s_wlan_outgoing_mux, portMAX_DELAY);
+    v = s_max_wlan_outgoing_queue_size;
+    c = s_wlan_outgoing_queue.capacity();
+    s_max_wlan_outgoing_queue_size = 0;
+    xSemaphoreGive(s_wlan_outgoing_mux);
+
+    return v * 100 / c;
 }

@@ -41,6 +41,7 @@ void set_ground2air_data_packet_handler(void (*handler)(Ground2Air_Data_Packet& 
 esp_err_t set_wifi_fixed_rate(WIFI_Rate value);
 esp_err_t set_wlan_power_dBm(float dBm);
 void setup_wifi_file_server(void);
+uint8_t getMaxWlanOutgoingQueueUsage();
 
 
 struct Stats

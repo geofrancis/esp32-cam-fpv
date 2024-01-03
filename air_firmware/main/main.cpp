@@ -66,6 +66,7 @@ static int64_t s_video_last_sent_tp = esp_timer_get_time();
 static int64_t s_video_last_acquired_tp = esp_timer_get_time();
 static bool s_video_skip_frame = false;
 static int64_t s_video_target_frame_dt = 0;
+static uint8_t s_max_wlan_outgoing_queue_usage = 0;
 
 static WIFI_Rate s_curr_wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
 
@@ -715,7 +716,7 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
     packet.last_part = last ? 1 : 0;
     packet.size = s_video_frame_data_size + sizeof(Air2Ground_Video_Packet);
     packet.pong = s_ground2air_config_packet.ping;
-    packet.wifi_queue = s_wlan_outgoing_queue.size() * 100 / s_wlan_outgoing_queue.capacity();
+    packet.wifi_queue = s_max_wlan_outgoing_queue_usage;
     packet.curr_wifi_rate = s_curr_wifi_rate;
     packet.crc = 0;
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_Video_Packet));
@@ -1117,9 +1118,10 @@ extern "C" void app_main()
     {
         if (s_uart_verbose > 0 && millis() - s_stats_last_tp >= 1000)
         {
+            s_max_wlan_outgoing_queue_usage = getMaxWlanOutgoingQueueUsage();
             s_stats_last_tp = millis();
             LOG("WLAN S: %d, R: %d, E: %d, D: %d, %%: %d || FPS: %d, D: %d || SD D: %d, E: %d || TLM IN: %d OUT: %d\n",
-                s_stats.wlan_data_sent, s_stats.wlan_data_received, s_stats.wlan_error_count, s_stats.wlan_received_packets_dropped, s_wlan_outgoing_queue.size() * 100 / s_wlan_outgoing_queue.capacity(),
+                s_stats.wlan_data_sent, s_stats.wlan_data_received, s_stats.wlan_error_count, s_stats.wlan_received_packets_dropped, s_max_wlan_outgoing_queue_usage,
                 (int)s_stats.video_frames, s_stats.video_data, s_stats.sd_data, s_stats.sd_drops, 
                 s_stats.in_telemetry_data, s_stats.out_telemetry_data);
             print_cpu_usage();
