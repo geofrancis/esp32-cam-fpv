@@ -148,6 +148,8 @@ static void comms_thread_proc()
     Clock::duration ping_avg = std::chrono::seconds(0);
     size_t ping_count = 0;
     size_t sent_count = 0;
+    size_t in_tlm_size = 0;
+    size_t out_tlm_size = 0;
     size_t total_data = 0;
     int16_t min_rssi = 0;
 
@@ -180,7 +182,7 @@ static void comms_thread_proc()
                 ping_avg = std::chrono::seconds(0);
             }
 
-            LOGI("Sent: {}, RX len: {}, RSSI: {}, Latency: {}/{}/{},vfps:{}", sent_count, total_data, min_rssi, 
+            LOGI("Sent: {}, RX len: {}, TlmIn: {}, TlmOut: {}, RSSI: {}, Latency: {}/{}/{},vfps:{}", sent_count, total_data, in_tlm_size, out_tlm_size, min_rssi, 
                 std::chrono::duration_cast<std::chrono::milliseconds>(ping_min).count(),
                 std::chrono::duration_cast<std::chrono::milliseconds>(ping_max).count(),
                 std::chrono::duration_cast<std::chrono::milliseconds>(ping_avg).count() / ping_count,video_fps);
@@ -192,6 +194,8 @@ static void comms_thread_proc()
             ping_max = std::chrono::seconds(0);
             ping_avg = std::chrono::seconds(0);
             sent_count = 0;
+            in_tlm_size = 0;
+            out_tlm_size = 0;
             ping_count = 0;
             total_data = 0;
             min_rssi = 0;
@@ -214,32 +218,22 @@ static void comms_thread_proc()
         }
 
         {
-            int bytes;
-            ioctl(fdUART, FIONREAD, &bytes);
-
             std::lock_guard<std::mutex> lg(s_ground2air_data_packet_mutex);
             auto& data = s_ground2air_data_packet;
 
-            if ( bytes > 0 )
-            {   
-                int frb = GROUND2AIR_DATA_MAX_PAYLOAD_SIZE - s_tlm_size;
-                if ( bytes > frb )
-                {
-                    bytes = frb;
-                }
+            int frb = GROUND2AIR_DATA_MAX_PAYLOAD_SIZE - s_tlm_size;
+            int n = read(fdUART, &(data.payload[s_tlm_size]), frb);
 
-                int n = read(fdUART, &(data.payload[s_tlm_size]), bytes);
-
-                if ( n >=0 )
-                {
-                    s_tlm_size += n;
-                }
+            if ( n > 0 )
+            {
+                s_tlm_size += n;
+                in_tlm_size += n;
             }
 
             if ( 
                 (s_tlm_size == GROUND2AIR_DATA_MAX_PAYLOAD_SIZE) ||
                 ( 
-                    ( s_tlm_size > 0 ) && (Clock::now() - last_data_sent_tp >= std::chrono::milliseconds(50)) 
+                    ( s_tlm_size > 0 ) && (Clock::now() - last_data_sent_tp >= std::chrono::milliseconds(100)) 
                 )
             )
             {
@@ -406,7 +400,7 @@ static void comms_thread_proc()
                 Air2Ground_Data_Packet& air2ground_data_packet = *(Air2Ground_Data_Packet*)rx_data.data.data();
                 uint8_t crc = air2ground_data_packet.crc;
                 air2ground_data_packet.crc = 0;
-                uint8_t computed_crc = crc8(0, rx_data.data.data(), packet_size);
+                uint8_t computed_crc = crc8(0, rx_data.data.data(), sizeof(Air2Ground_Data_Packet));
                 if (crc != computed_crc)
                 {
                     LOGE("Telemetry frame: crc mismatch {}: {} != {}", payload_size, crc, computed_crc);
@@ -418,6 +412,7 @@ static void comms_thread_proc()
                 //LOGI("OK Telemetry frame {} - CRC OK {}. {}", payload_size, crc, rx_queue.size());
 
                 write(fdUART, ((uint8_t*)&air2ground_data_packet) + sizeof(Air2Ground_Data_Packet), payload_size);
+                out_tlm_size += payload_size;
             }
             else
             {
@@ -663,8 +658,8 @@ bool init_uart()
     tty.c_cc[VTIME] = 0;
     tty.c_cc[VMIN] = 0;
     
-    cfsetispeed(&tty, B1152000);
-    cfsetospeed(&tty, B1152000);
+    cfsetispeed(&tty, B115200);
+    cfsetospeed(&tty, B115200);
   
     if (tcsetattr(fdUART, TCSANOW, &tty) != 0) 
     {
@@ -780,7 +775,7 @@ int main(int argc, const char* argv[])
     rx_descriptor.mtu = s_ground2air_config_packet.fec_codec_mtu;
 
     tx_descriptor.coding_k = 2;
-    tx_descriptor.coding_n = 6;
+    tx_descriptor.coding_n = 3;
     tx_descriptor.mtu = GROUND2AIR_DATA_MAX_SIZE;
 
     if ( !init_uart())
