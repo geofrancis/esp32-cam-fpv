@@ -45,6 +45,15 @@ uint16_t g_wifi_channel;
 static int s_stats_last_tp = -10000;
 
 
+//Debug UART0
+#define TXD0_PIN    1
+#define RXD0_PIN    4  //move from pin 3 to pin 4 to free pin 3 for a REC button
+
+//Mavlink UART2
+#define TXD2_PIN    12   //should be low at boot!!!
+#define RXD2_PIN    13 
+
+#define REC_BUTTON_PIN  3
 
 /////////////////////////////////////////////////////////////////////////
 
@@ -58,13 +67,11 @@ static int64_t s_video_last_acquired_tp = esp_timer_get_time();
 static bool s_video_skip_frame = false;
 static int64_t s_video_target_frame_dt = 0;
 
+static WIFI_Rate s_curr_wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
+
 /////////////////////////////////////////////////////////////////////////
 
-#ifdef UART_MAVLINK
-static int s_uart_verbose = 0;
-#else
 static int s_uart_verbose = 1;
-#endif
 
 #define LOG(...) do { if (s_uart_verbose > 0) SAFE_PRINTF(__VA_ARGS__); } while (false) 
 
@@ -73,6 +80,11 @@ static int s_uart_verbose = 1;
 static constexpr gpio_num_t STATUS_LED_PIN = GPIO_NUM_33;
 static constexpr uint8_t STATUS_LED_ON = 0;
 static constexpr uint8_t STATUS_LED_OFF = 1;
+
+static constexpr gpio_num_t FLASH_LED_PIN = GPIO_NUM_4;
+
+static bool s_dvr_record = false;
+
 
 void initialize_status_led()
 {
@@ -84,6 +96,25 @@ void initialize_status_led()
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     gpio_config(&io_conf);
     gpio_set_level(STATUS_LED_PIN, STATUS_LED_OFF);
+
+
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = 1ULL << FLASH_LED_PIN;
+    io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+    gpio_config(&io_conf);
+}
+
+void initialize_rec_button()
+{
+    gpio_config_t io_conf;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = 1ULL << REC_BUTTON_PIN;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    gpio_config(&io_conf);
 }
 
 IRAM_ATTR uint64_t micros()
@@ -96,14 +127,88 @@ IRAM_ATTR uint64_t millis()
     return esp_timer_get_time() / 1000ULL;
 }
 
-IRAM_ATTR void set_status_led_on()
+void set_status_led(bool enabled)
 {
-    gpio_set_level(STATUS_LED_PIN, STATUS_LED_ON);
+    gpio_set_level(STATUS_LED_PIN, enabled ? STATUS_LED_ON : STATUS_LED_OFF);
+
+    if ( enabled) 
+    {
+        gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLUP_ONLY);    // D1, needed in 4-line mode only
+    }
+    else
+    {
+        gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);    // D1, needed in 4-line mode only
+    }
 }
 
-IRAM_ATTR void update_status_led()
+void update_status_led()
 {
-    gpio_set_level(STATUS_LED_PIN, STATUS_LED_OFF);
+ /*
+  if ( cameraInitError )
+  {
+    bool b = (millis() & 0x7f) > 0x40;
+    b &= (millis() & 0x7ff) > 0x400;
+    digitalWrite( LED_PIN, b ? LOW : HIGH);
+    digitalWrite( 4, b ? HIGH : LOW);
+    return;
+  }
+
+  if ( initError )
+  {
+    bool b = (millis() & 0x7f) > 0x40;
+    digitalWrite( LED_PIN, b ? LOW : HIGH);
+    digitalWrite( 4, b ? HIGH : LOW);
+    return;
+  }
+*/
+  if (s_dvr_record)
+  {
+    bool b = (millis() & 0x7ff) > 0x400;
+    set_status_led(b);
+  }
+  else
+  {
+    set_status_led(true);
+  }
+}
+
+void update_status_led_file_server()
+{
+    bool b = (millis() & 0x2ff) > 0x180;
+    set_status_led(b);
+}
+
+//=====================================================================
+//=====================================================================
+bool getButtonState()
+{
+    return gpio_get_level((gpio_num_t)REC_BUTTON_PIN) == 0;
+}
+
+//=====================================================================
+//=====================================================================
+void checkButton()
+{
+  static uint32_t debounceTime = millis() + 100;
+  static bool lastButtonState = false;
+
+  if ( debounceTime > millis() ) return;
+  bool buttonState = getButtonState();
+  if ( buttonState != lastButtonState )
+  {
+    debounceTime = millis() + 100;
+    lastButtonState = buttonState;
+
+    if ( buttonState )
+    {
+        s_dvr_record = !s_dvr_record;
+        LOG("Button pressed!\n");
+    }
+    else
+    {
+        LOG("Button unpressed!\n");
+    }
+  }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -117,6 +222,22 @@ auto _init_result2 = []() -> bool
   return true;
 }();
 
+
+//===========================================================================================
+//===========================================================================================
+void init_failure()
+{
+    printf("INIT FAILURE!\n");
+    
+    initialize_status_led();
+    while( true )
+    {
+        esp_task_wdt_reset();
+
+        bool b = (millis() & 0x7f) > 0x40;
+        set_status_led(b);
+    }
+}
 
 #ifdef DVR_SUPPORT
 
@@ -134,7 +255,6 @@ auto _init_result = []() -> bool
 
 static TaskHandle_t s_sd_write_task = nullptr;
 static TaskHandle_t s_sd_enqueue_task = nullptr;
-static TaskHandle_t s_file_server_task = nullptr;
 static bool s_sd_initialized = false;
 static size_t s_sd_file_size = 0;
 static uint32_t s_sd_next_session_id = 0;
@@ -149,8 +269,9 @@ Circular_Buffer s_sd_fast_buffer(new uint8_t[SD_FAST_BUFFER_SIZE], SD_FAST_BUFFE
 //this slow buffer is used to buffer data that is about to be written to SD. The reason it's this big is because SD card write speed fluctuated a lot and 
 // sometimes it pauses for a few hundred ms. So to avoid lost data, I have to buffer it into a big enoigh buffer.
 //The data is written to the sd card by the sd_write_task, in chunks of SD_WRITE_BLOCK_SIZE.
-static constexpr size_t SD_SLOW_BUFFER_SIZE = 3 * 1024 * 1024;
-Circular_Buffer s_sd_slow_buffer((uint8_t*)heap_caps_malloc(SD_SLOW_BUFFER_SIZE, MALLOC_CAP_SPIRAM), SD_SLOW_BUFFER_SIZE);
+static constexpr size_t SD_SLOW_BUFFER_SIZE_PSRAM = 3 * 1024 * 1024;
+static constexpr size_t SD_SLOW_BUFFER_SIZE_RAM = 32768;
+Circular_Buffer* s_sd_slow_buffer = NULL;
 
 //Cannot write to SD directly from the slow, SPIRAM buffer as that causes the write speed to plummet. So instead I read from the slow buffer into
 // this RAM block and write from it directly. This results in several MB/s write speed performance which is good enough.
@@ -188,14 +309,14 @@ static bool init_sd()
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
     //host.max_freq_khz = SDMMC_FREQ_PROBING;
     host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
-    //host.flags = SDMMC_HOST_FLAG_1BIT;
+    host.flags = SDMMC_HOST_FLAG_1BIT;
 
     gpio_set_pull_mode((gpio_num_t)14, GPIO_PULLUP_ONLY);   // CLK, needed in 4-line mode only
-    gpio_set_pull_mode((gpio_num_t)15, GPIO_PULLUP_ONLY);   // CMD, needed in 4- and 1- line modes
-    gpio_set_pull_mode((gpio_num_t)2, GPIO_PULLUP_ONLY);    // D0, needed in 4-line mode only
-    gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLUP_ONLY);    // D1, needed in 4-line mode only
+    gpio_set_pull_mode((gpio_num_t)15, GPIO_PULLUP_ONLY);   // CMD
+    gpio_set_pull_mode((gpio_num_t)2, GPIO_PULLUP_ONLY);    // D0
+    gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);  // D1, needed in 4-line mode only
     gpio_set_pull_mode((gpio_num_t)12, GPIO_PULLUP_ONLY);   // D2, needed in 4-line mode only
-    gpio_set_pull_mode((gpio_num_t)13, GPIO_PULLUP_ONLY);   // D3, needed in 4- and 1-line modes
+    gpio_set_pull_mode((gpio_num_t)13, GPIO_PULLUP_ONLY);   // D3, needed in 4-line mode only
 
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
     //slot_config.width = 1;
@@ -217,7 +338,7 @@ static bool init_sd()
     char buffer[64];
     for (uint32_t i = 0; i < 100000; i++)
     {
-        sprintf(buffer, "/sdcard/session%03d_segment000.mjpeg", i);
+        sprintf(buffer, "/sdcard/v%03d_000.mpg", i);
         FILE* f = fopen(buffer, "rb");
         if (f)
         {
@@ -234,7 +355,7 @@ static bool init_sd()
 static FILE* open_sd_file()
 {
     char buffer[64];
-    sprintf(buffer, "/sdcard/session%03d_segment%03d.mjpeg", s_sd_next_session_id, s_sd_next_segment_id);
+    sprintf(buffer, "/sdcard/v%03d_%03d.mpg", s_sd_next_session_id, s_sd_next_segment_id);
     FILE* f = fopen(buffer, "wb");
     if (!f){
         LOG("error to open sdcard session %s!\n",buffer);
@@ -255,7 +376,7 @@ static void sd_write_proc(void*)
 
     while (true)
     {
-        if (!s_ground2air_config_packet.dvr_record)
+        if (!s_dvr_record)
         {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
             continue;
@@ -266,12 +387,13 @@ static void sd_write_proc(void*)
         FILE* f = open_sd_file();
         if (!f)
         {
+            s_dvr_record = false;
             vTaskDelay(1000 / portTICK_PERIOD_MS); 
             continue;
         }
 
         xSemaphoreTake(s_sd_slow_buffer_mux, portMAX_DELAY);
-        s_sd_slow_buffer.clear();
+        s_sd_slow_buffer->clear();
         xSemaphoreGive(s_sd_slow_buffer_mux);
 
         bool error = false; 
@@ -282,7 +404,7 @@ static void sd_write_proc(void*)
 
             while (true) //consume all the buffer
             {
-                if (!s_ground2air_config_packet.dvr_record)
+                if (!s_dvr_record)
                 {
                     LOG("Done recording, closing file\n", s_sd_file_size);
                     done = true;
@@ -290,7 +412,7 @@ static void sd_write_proc(void*)
                 }
 
                 xSemaphoreTake(s_sd_slow_buffer_mux, portMAX_DELAY);
-                bool read = s_sd_slow_buffer.read(block, SD_WRITE_BLOCK_SIZE);
+                bool read = s_sd_slow_buffer->read(block, SD_WRITE_BLOCK_SIZE);
                 xSemaphoreGive(s_sd_slow_buffer_mux);
                 if (!read)
                     break; //not enough data, wait
@@ -304,7 +426,7 @@ static void sd_write_proc(void*)
                 }
                 s_stats.sd_data += SD_WRITE_BLOCK_SIZE;
                 s_sd_file_size += SD_WRITE_BLOCK_SIZE;
-                if (s_sd_file_size > 500 * 1024 * 1024)
+                if (s_sd_file_size > 10 * 1024 * 1024)
                 {
                     LOG("Max file size reached: %d. Restarting session\n", s_sd_file_size);
                     done = true;
@@ -330,7 +452,7 @@ static void sd_enqueue_proc(void*)
 {
     while (true)
     {
-        if (!s_ground2air_config_packet.dvr_record)
+        if (!s_dvr_record)
         {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
             continue;
@@ -356,7 +478,7 @@ static void sd_enqueue_proc(void*)
             xSemaphoreGive(s_sd_fast_buffer_mux);
 
             xSemaphoreTake(s_sd_slow_buffer_mux, portMAX_DELAY);
-            s_sd_slow_buffer.write(buffer, size);
+            s_sd_slow_buffer->write(buffer, size);
             xSemaphoreGive(s_sd_slow_buffer_mux);
 
             xSemaphoreTake(s_sd_fast_buffer_mux, portMAX_DELAY);
@@ -366,7 +488,7 @@ static void sd_enqueue_proc(void*)
             if (s_sd_write_task)
                 xTaskNotifyGive(s_sd_write_task); //notify task
 
-            if (!s_ground2air_config_packet.dvr_record)
+            if (!s_dvr_record)
                 break;
         }
     }
@@ -557,12 +679,15 @@ static void handle_ground2air_data_packet(Ground2Air_Data_Packet& src)
     xSemaphoreTake(s_serial_mux, portMAX_DELAY);
 
     int s = src.size - sizeof(Ground2Air_Header);
-    size_t freeSize = 0;
+    s_stats.in_telemetry_data += s;        
 
-    ESP_ERROR_CHECK( uart_get_tx_buffer_free_size(UART_NUM_0, &freeSize) );
+    size_t freeSize = 0;
+    ESP_ERROR_CHECK( uart_get_tx_buffer_free_size(UART_NUM_2, &freeSize) );
+
     if ( freeSize >= s )
     {
-        uart_write_bytes(UART_NUM_0, ((uint8_t*)&src) + sizeof(Ground2Air_Header), s);
+        uart_write_bytes(UART_NUM_2, ((uint8_t*)&src) + sizeof(Ground2Air_Header), s);
+        //uart_write_bytes(UART_NUM_0, ((uint8_t*)&src) + sizeof(Ground2Air_Header), s);
     }
 
     xSemaphoreGive(s_serial_mux);
@@ -590,6 +715,8 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
     packet.last_part = last ? 1 : 0;
     packet.size = s_video_frame_data_size + sizeof(Air2Ground_Video_Packet);
     packet.pong = s_ground2air_config_packet.ping;
+    packet.wifi_queue = s_wlan_outgoing_queue.size() * 100 / s_wlan_outgoing_queue.capacity();
+    packet.curr_wifi_rate = s_curr_wifi_rate;
     packet.crc = 0;
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_Video_Packet));
     if (!s_fec_encoder.flush_encode_packet(true))
@@ -599,9 +726,14 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
     }
 }
 
+//constexpr size_t MAX_TELEMETRY_PAYLOAD_SIZE = AIR2GROUND_MTU - sizeof(Air2Ground_Data_Packet);
+//constexpr size_t MAX_TELEMETRY_PAYLOAD_SIZE = 512;
+constexpr size_t MAX_TELEMETRY_PAYLOAD_SIZE = 128;
+
 IRAM_ATTR void send_air2ground_data_packet()
 {
     uint8_t* packet_data = s_fec_encoder.get_encode_packet_data(true);
+    int ds = MAX_TELEMETRY_PAYLOAD_SIZE;
 
     if(!packet_data){
         LOG("no data buf!\n");
@@ -610,23 +742,24 @@ IRAM_ATTR void send_air2ground_data_packet()
 
     Air2Ground_Data_Packet& packet = *(Air2Ground_Data_Packet*)packet_data;
     packet.type = Air2Ground_Header::Type::Telemetry;
-    packet.size = 128 + sizeof(Air2Ground_Data_Packet);
+    packet.size = ds + sizeof(Air2Ground_Data_Packet);
     packet.pong = s_ground2air_config_packet.ping;
     packet.crc = 0;
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_Data_Packet));
 
-    s_stats.telemetry_data += 128;
+    s_stats.out_telemetry_data += ds;
 
-    ESP_ERROR_CHECK( uart_read_bytes(UART_NUM_0, packet_data + sizeof(Air2Ground_Data_Packet), 128, 100));
+    ESP_ERROR_CHECK( uart_read_bytes(UART_NUM_2, packet_data + sizeof(Air2Ground_Data_Packet), MAX_TELEMETRY_PAYLOAD_SIZE, 0));
 
     if (!s_fec_encoder.flush_encode_packet(true))
     {
         LOG("Fec codec busy\n");
         s_stats.wlan_error_count++;
     }
+
 }
 
-constexpr size_t PAYLOAD_SIZE = AIR2GROUND_MTU - sizeof(Air2Ground_Video_Packet);
+constexpr size_t MAX_VIDEO_DATA_PAYLOAD_SIZE = AIR2GROUND_MTU - sizeof(Air2Ground_Video_Packet);
 
 IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_t count, bool last)
 {
@@ -664,7 +797,7 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
 
             while (count > 0)
             {
-                if (s_video_frame_data_size >= PAYLOAD_SIZE) //flush prev data?
+                if (s_video_frame_data_size >= MAX_VIDEO_DATA_PAYLOAD_SIZE) //flush prev data?
                 {
                     //LOG("Flush: %d %d\n", s_video_frame_index, s_video_frame_data_size);
                     send_air2ground_video_packet(false);
@@ -678,7 +811,7 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
                 uint8_t* packet_data = s_fec_encoder.get_encode_packet_data(true);
                 uint8_t* start_ptr = packet_data + sizeof(Air2Ground_Video_Packet) + s_video_frame_data_size;
                 uint8_t* ptr = start_ptr;
-                size_t c = std::min(PAYLOAD_SIZE - s_video_frame_data_size, count);
+                size_t c = std::min(MAX_VIDEO_DATA_PAYLOAD_SIZE - s_video_frame_data_size, count);
 
                 count -= c;
                 s_video_frame_data_size += c;
@@ -700,7 +833,7 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
                     *ptr++ = *src; src += stride;
                 }
 #ifdef DVR_SUPPORT
-                if (s_ground2air_config_packet.dvr_record)
+                if (s_dvr_record)
                     add_to_sd_fast_buffer(start_ptr, c);
 #endif
             }
@@ -725,6 +858,12 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
             {
                 s_video_skip_frame = false;
                 s_video_last_sent_tp += std::max(s_video_target_frame_dt, acquire_dt);
+            }
+
+            //dynamically decrease fps
+            if ( s_wlan_outgoing_queue.size() > s_wlan_outgoing_queue.capacity() / 2)
+            {
+                s_video_skip_frame = true;
             }
 
             //////////////////
@@ -850,7 +989,7 @@ extern "C" void app_main()
     Ground2Air_Config_Packet& ground2air_config_packet = s_ground2air_config_packet;
     ground2air_config_packet.type = Ground2Air_Header::Type::Config;
     ground2air_config_packet.size = sizeof(ground2air_config_packet);
-    ground2air_config_packet.wifi_rate = WIFI_Rate::RATE_G_54M_ODFM;
+    ground2air_config_packet.wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
 
     srand(esp_timer_get_time());
 
@@ -859,7 +998,31 @@ extern "C" void app_main()
     printf("MEMORY at start: \n");
     heap_caps_print_heap_info(MALLOC_CAP_8BIT);
 
-    uart_config_t uart_config = {
+    initialize_status_led();
+    initialize_rec_button();
+
+#ifdef DVR_SUPPORT
+
+    void* psb = heap_caps_malloc(SD_SLOW_BUFFER_SIZE_PSRAM, MALLOC_CAP_SPIRAM);
+    if ( !!psb )
+    {
+        s_sd_slow_buffer = new Circular_Buffer( (uint8_t*)psb, SD_SLOW_BUFFER_SIZE_PSRAM);
+    }
+    else 
+    {
+        void* psb = new uint8_t[SD_SLOW_BUFFER_SIZE_RAM];
+        if ( psb == NULL)
+        {
+            printf("SD Slow buffer not allocated\n");
+            init_failure( );
+        }
+        s_sd_slow_buffer = new Circular_Buffer( (uint8_t*)psb, SD_SLOW_BUFFER_SIZE_RAM);
+    }
+
+#endif
+
+    //init debug uart
+    uart_config_t uart_config0 = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
@@ -869,9 +1032,12 @@ extern "C" void app_main()
         .source_clk = UART_SCLK_APB
     };  
     // Configure UART parameters
-    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config) );
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config0) );
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 256, 256, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, TXD0_PIN, RXD0_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 256, 0, NULL, 0));
+    //reinitialize rec button after configuring uarts
+    initialize_rec_button();
 
     nvs_args_init();
     g_wifi_channel = (uint16_t)nvs_args_read("channel");
@@ -881,34 +1047,29 @@ extern "C" void app_main()
         LOG("could not find the nvs store variable:channel, set wifi channel to default %d", g_wifi_channel);
     }
 
-    initialize_status_led();
 
     setup_wifi(s_ground2air_config_packet.wifi_rate, g_wifi_channel, s_ground2air_config_packet.wifi_power, packet_received_cb);
 
-    #ifdef DVR_SUPPORT
+#ifdef DVR_SUPPORT
     init_sd();
-    
-    auto a = [](void * arg){
-        int wait_seconds = 10;
-        while(wait_seconds--){
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-            LOG("wait for ground 2 air packet..");
-         //   if(s_recv_ground2air_packet)
-         {
-                break;
-            }
-        }
 
-        if(wait_seconds < 0){
-            LOG("no ground 2 air packet for 10 seconds. setup file server...");
-            vTaskSuspend(s_wifi_rx_task);
-            vTaskSuspend(s_wifi_tx_task);
-            setup_wifi_file_server();
-        }
-        vTaskDelete(NULL);
-    };
+    vTaskDelay(100 / portTICK_PERIOD_MS);
 
-    xTaskCreatePinnedToCore((TaskFunction_t)a, "file server", 4096, nullptr, 1, &s_file_server_task, tskNO_AFFINITY);
+    if ( getButtonState() ) 
+    {
+        LOG("Starting file server...");
+        vTaskSuspend(s_wifi_rx_task);
+        vTaskSuspend(s_wifi_tx_task);
+        setup_wifi_file_server();
+
+        while (true)
+        {
+            vTaskDelay(1);
+            esp_task_wdt_reset();
+
+            update_status_led_file_server();
+        }
+    }
 
     {
         int core = tskNO_AFFINITY;
@@ -922,7 +1083,27 @@ extern "C" void app_main()
         if (res != pdPASS)
             LOG("Failed sd enqueue task: %d\n", res);
     }
-    #endif
+#endif
+
+//initialize UART2 after SD
+#ifdef UART_MAVLINK
+
+    uart_config_t uart_config2 = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .rx_flow_ctrl_thresh = 122,
+        .source_clk = UART_SCLK_APB
+    };  
+    // Configure UART parameters
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_2, &uart_config2) );
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_2, MAX_TELEMETRY_PAYLOAD_SIZE + 1024, 256, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, TXD2_PIN, RXD2_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+
+#endif
+
 
     init_camera();
     printf("MEMORY Before Loop: \n");
@@ -937,9 +1118,10 @@ extern "C" void app_main()
         if (s_uart_verbose > 0 && millis() - s_stats_last_tp >= 1000)
         {
             s_stats_last_tp = millis();
-            LOG("WLAN S: %d, R: %d, E: %d, D: %d, %%: %d || FPS: %d, D: %d || D: %d, E: %d || TO: %d\n",
+            LOG("WLAN S: %d, R: %d, E: %d, D: %d, %%: %d || FPS: %d, D: %d || SD D: %d, E: %d || TLM IN: %d OUT: %d\n",
                 s_stats.wlan_data_sent, s_stats.wlan_data_received, s_stats.wlan_error_count, s_stats.wlan_received_packets_dropped, s_wlan_outgoing_queue.size() * 100 / s_wlan_outgoing_queue.capacity(),
-                (int)s_stats.video_frames, s_stats.video_data, s_stats.sd_data, s_stats.sd_drops, s_stats.telemetry_data);
+                (int)s_stats.video_frames, s_stats.video_data, s_stats.sd_data, s_stats.sd_drops, 
+                s_stats.in_telemetry_data, s_stats.out_telemetry_data);
             print_cpu_usage();
 
             s_stats = Stats();
@@ -950,20 +1132,28 @@ extern "C" void app_main()
 
         update_status_led();
 
+        checkButton();
+
 #ifdef UART_MAVLINK
         xSemaphoreTake(s_serial_mux, portMAX_DELAY);
 
-        while ( true )
+        if ( s_video_frame_data_size == 0 &&  s_video_part_index == 0 )
         {
-            size_t rs = 0;
-            ESP_ERROR_CHECK( uart_get_buffered_data_len(UART_NUM_0, &rs) );
-            if (rs >= 128)  // or timeout ....
+            while ( true )
             {
-                send_air2ground_data_packet();
-            }
-            else
-            {
-                break;
+                size_t rs = 0;
+                ESP_ERROR_CHECK( uart_get_buffered_data_len(UART_NUM_2, &rs) );
+
+                //LOG("%d\n", rs);
+
+                if (rs >= MAX_TELEMETRY_PAYLOAD_SIZE) //TODO: or rs>0 and >agregation time
+                {
+                    send_air2ground_data_packet();
+                }
+                else
+                {
+                    break;
+                }
             }
         }
 

@@ -117,7 +117,6 @@ IRAM_ATTR static void wifi_tx_proc(void *)
                     esp_err_t res = esp_wifi_80211_tx(ESP_WIFI_IF, packet.ptr, WLAN_IEEE_HEADER_SIZE + packet.size, false);
                     if (res == ESP_OK)
                     {
-                        //set_status_led_on();
                         s_stats.wlan_data_sent += packet.size;
 
                         xSemaphoreTake(s_wlan_outgoing_mux, portMAX_DELAY);
@@ -149,8 +148,6 @@ IRAM_ATTR static void wifi_tx_proc(void *)
             else
                 break;
         }
-
-        //update_status_led();
     }
 }
 
@@ -172,8 +169,6 @@ IRAM_ATTR static void wifi_rx_proc(void *)
 
             if (packet.ptr)
             {
-                //set_status_led_on();
-                
                 if (packet.size >= sizeof(Ground2Air_Header))
                 {
                     Ground2Air_Header& header = *(Ground2Air_Header*)packet.ptr;

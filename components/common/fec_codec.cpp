@@ -65,7 +65,7 @@ void setup_fec(uint8_t k,uint8_t n,uint16_t mtu,void (*fec_encoded_cb)(const voi
     init_fec();
 
     init_fec_codec(s_fec_encoder,k,n,mtu,true);
-    init_fec_codec(s_fec_decoder,2,6,GROUND2AIR_DATA_MAX_SIZE,false);
+    init_fec_codec(s_fec_decoder,2,3,GROUND2AIR_DATA_MAX_SIZE,false);
     s_fec_encoder.set_data_encoded_cb(fec_encoded_cb);
     s_fec_decoder.set_data_decoded_cb(fec_decoded_cb);
 

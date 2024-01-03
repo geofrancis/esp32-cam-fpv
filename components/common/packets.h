@@ -109,7 +109,7 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
         uint16_t aec_value = 0;//0 - 1200
         bool agc = true;
         uint8_t agc_gain = 0;//0 - 30
-        uint8_t gainceiling = 0;//0 - 6
+        uint8_t gainceiling = 2;//0 - 6
         bool bpc = true;
         bool wpc = true;
         bool raw_gma = false;

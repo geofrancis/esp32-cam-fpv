@@ -6,13 +6,13 @@
 /////////////////////////////////////////////////////////////////////////
 /*Select Camera Model*/
 #define CAMERA_MODEL_AI_THINKER
-//#define DVR_SUPPORT
+#define DVR_SUPPORT
 
 #define DEFAULT_WIFI_CHANNEL 11
 extern uint16_t g_wifi_channel;
 
 //define to use mavlink telemetry or UART1, otherwise use UART for Debug output
-//#define UART_MAVLINK
+#define UART_MAVLINK
 
 #if defined(CAMERA_MODEL_WROVER_KIT)
 #define PWDN_GPIO_NUM    -1
