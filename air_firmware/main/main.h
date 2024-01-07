@@ -11,7 +11,7 @@
 #define DEFAULT_WIFI_CHANNEL 11
 extern uint16_t g_wifi_channel;
 
-//define to use mavlink telemetry or UART1, otherwise use UART for Debug output
+//define to use mavlink telemetry on UART2 pins 13/14
 #define UART_MAVLINK
 
 #if defined(CAMERA_MODEL_WROVER_KIT)
