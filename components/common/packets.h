@@ -83,7 +83,7 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
 {
     uint8_t ping = 0; //used for latency measurement
     int8_t wifi_power = 20;//dBm
-    WIFI_Rate wifi_rate = WIFI_Rate::RATE_G_48M_ODFM;
+    WIFI_Rate wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
     uint8_t fec_codec_k = 2;
     uint8_t fec_codec_n = 6;
     uint16_t fec_codec_mtu = AIR2GROUND_MTU;
@@ -114,8 +114,8 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
         bool wpc = true;
         bool raw_gma = false;
         bool lenc = true;
-        bool hmirror = false;
-        bool vflip = false;
+        bool hmirror = true;
+        bool vflip = true;
         bool dcw = true;
     };
     Camera camera;
