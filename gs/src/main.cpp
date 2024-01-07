@@ -97,7 +97,9 @@ std::unique_ptr<IHAL> s_hal;
 Comms s_comms;
 Video_Decoder s_decoder;
 
+#ifdef USE_MAVLINK
 int fdUART;
+#endif
 
 /* This prints an "Assertion failed" message and aborts.  */
 void __assert_fail(const char* __assertion, const char* __file, unsigned int __line, const char* __function)
@@ -217,6 +219,7 @@ static void comms_thread_proc()
             sent_count++;
         }
 
+#ifdef USE_MAVLINK
         {
             std::lock_guard<std::mutex> lg(s_ground2air_data_packet_mutex);
             auto& data = s_ground2air_data_packet;
@@ -247,6 +250,7 @@ static void comms_thread_proc()
                 s_tlm_size = 0;
             }
         }
+#endif
 
 #ifdef TEST_LATENCY
         if (s_test_latency_gpio_value == 0 && Clock::now() - s_test_latency_gpio_last_tp >= std::chrono::milliseconds(200))
@@ -385,6 +389,7 @@ static void comms_thread_proc()
             }
             else if (air2ground_header.type == Air2Ground_Header::Type::Telemetry)
             {
+#ifdef USE_MAVLINK
                 if (packet_size > rx_data.size)
                 {
                     LOGE("Telemetry frame: data too big: {} > {}", packet_size, rx_data.size);
@@ -413,6 +418,7 @@ static void comms_thread_proc()
 
                 write(fdUART, ((uint8_t*)&air2ground_data_packet) + sizeof(Air2Ground_Data_Packet), payload_size);
                 out_tlm_size += payload_size;
+#endif
             }
             else
             {
@@ -628,9 +634,9 @@ int run(char* argv[])
     return 0;
 }
 
+#ifdef USE_MAVLINK
 bool init_uart()
 {
-
     fdUART = open("/dev/serial0", O_RDWR);
 
     struct termios tty;
@@ -669,6 +675,7 @@ bool init_uart()
 
     return true;
 }
+#endif 
 
 //===================================================================================
 //===================================================================================
@@ -695,10 +702,10 @@ int main(int argc, const char* argv[])
     }
 
     Ground2Air_Config_Packet& config=s_ground2air_config_packet;
-    config.wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
-    config.camera.resolution = Resolution::VGA;
-    config.camera.fps_limit = 30;
-    config.camera.quality = 8;
+    //config.wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
+    //config.camera.resolution = Resolution::SVGA;
+    //config.camera.fps_limit = 30;
+    //config.camera.quality = 30;
 
     for(int i=1;i<argc;++i){
         auto temp = std::string(argv[i]);
@@ -778,10 +785,12 @@ int main(int argc, const char* argv[])
     tx_descriptor.coding_n = 3;
     tx_descriptor.mtu = GROUND2AIR_DATA_MAX_SIZE;
 
+#ifdef USE_MAVLINK
     if ( !init_uart())
     {
         return -1;
     }
+#endif    
 
     if (!s_hal->init())
         return -1;
