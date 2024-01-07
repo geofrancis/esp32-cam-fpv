@@ -22,8 +22,55 @@
 #include "esp_http_server.h"
 #include "cJSON.h"
 
+#include <esp_flash_partitions.h>
+#include <esp_ota_ops.h>
+#include <esp_partition.h>
+
 #include "main.h"
 #include "nvs_args.h"
+
+static const char ota_html_file[] = "\
+<style>\n\
+.progress {margin: 15px auto;  max-width: 500px;height: 30px;}\n\
+.progress .progress__bar {\n\
+  height: 100%; width: 0%; border-radius: 15px;\n\
+  background: repeating-linear-gradient(135deg,#336ffc,#036ffc 15px,#1163cf 15px,#1163cf 30px); }\n\
+ .status {font-weight: bold; font-size: 30px;};\n\
+</style>\n\
+<!--link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/2.2.1/css/bootstrap.min.css\"-->\n\
+<div class=\"well\" style=\"text-align: center;\">\n\
+  <div class=\"btn\" onclick=\"file_sel.click();\"><i class=\"icon-upload\" style=\"padding-right: 5px;\"></i>Upload Firmware</div>\n\
+  <div class=\"progress\"><div class=\"progress__bar\" id=\"progress\"></div></div>\n\
+  <div class=\"status\" id=\"status_div\"></div>\n\
+</div>\n\
+<input type=\"file\" id=\"file_sel\" onchange=\"upload_file()\">\n\
+<script>\n\
+function upload_file() {\n\
+  document.getElementById(\"status_div\").innerHTML = \"Upload in progress\";\n\
+  let data = document.getElementById(\"file_sel\").files[0];\n\
+  xhr = new XMLHttpRequest();\n\
+  xhr.open(\"POST\", \"/ota\", true);\n\
+  xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');\n\
+  xhr.upload.addEventListener(\"progress\", function (event) {\n\
+     if (event.lengthComputable) {\n\
+    	 document.getElementById(\"progress\").style.width = (event.loaded / event.total) * 100 + \"%\";\n\
+     }\n\
+  });\n\
+  xhr.onreadystatechange = function () {\n\
+    if(xhr.readyState === XMLHttpRequest.DONE) {\n\
+      var status = xhr.status;\n\
+      if (status >= 200 && status < 400)\n\
+      {\n\
+        document.getElementById(\"status_div\").innerHTML = \"Upload accepted. Device will reboot.\";\n\
+      } else {\n\
+        document.getElementById(\"status_div\").innerHTML = \"Upload rejected!\";\n\
+      }\n\
+    }\n\
+  };\n\
+  xhr.send(data);\n\
+  return false;\n\
+}\n\
+</script>";
 
 /* Max length a file path can have on storage */
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + CONFIG_SPIFFS_OBJ_NAME_LEN)
@@ -326,6 +373,98 @@ static esp_err_t configs_handler(httpd_req_t *req)
 }
 
 
+//-----------------------------------------------------------------------------
+static esp_err_t _ota_get_handler( httpd_req_t *req )
+{
+    httpd_resp_set_status( req, HTTPD_200 );
+    httpd_resp_set_hdr( req, "Connection", "keep-alive" );
+    httpd_resp_send( req, ota_html_file, strlen( ota_html_file ) );
+    return ESP_OK;
+}
+
+//-----------------------------------------------------------------------------
+static esp_err_t _ota_post_handler( httpd_req_t *req )
+{
+  char buf[256];
+  httpd_resp_set_status( req, HTTPD_500 );    // Assume failure
+  
+  int ret, remaining = req->content_len;
+  ESP_LOGI( TAG, "Receiving\n" );
+  
+  esp_ota_handle_t update_handle = 0 ;
+  const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
+  const esp_partition_t *running          = esp_ota_get_running_partition();
+
+  esp_err_t err = ESP_OK;
+
+  if ( update_partition == NULL )
+  {
+    ESP_LOGE( TAG, "Uh oh, bad things\n" );
+    goto return_failure;
+  }
+
+  ESP_LOGI( TAG, "Writing partition: type %d, subtype %d, offset 0x%08x\n", update_partition-> type, update_partition->subtype, update_partition->address);
+  ESP_LOGI( TAG, "Running partition: type %d, subtype %d, offset 0x%08x\n", running->type,           running->subtype,          running->address);
+  err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
+  if (err != ESP_OK)
+  {
+      ESP_LOGE( TAG, "esp_ota_begin failed (%s)", esp_err_to_name(err));
+      goto return_failure;
+  }
+  while ( remaining > 0 )
+  {
+    // Read the data for the request
+    if ( ( ret = httpd_req_recv( req, buf, MIN( remaining, sizeof( buf ) ) ) ) <= 0 )
+    {
+      if ( ret == HTTPD_SOCK_ERR_TIMEOUT )
+      {
+        // Retry receiving if timeout occurred
+        continue;
+      }
+
+      goto return_failure;
+    }
+    
+    size_t bytes_read = ret;
+    
+    remaining -= bytes_read;
+    err = esp_ota_write( update_handle, buf, bytes_read);
+    if (err != ESP_OK)
+    {
+      goto return_failure;
+    }
+  }
+
+  ESP_LOGI( TAG, "Receiving done\n" );
+
+  // End response
+  if ( ( esp_ota_end(update_handle)                   == ESP_OK ) && 
+       ( esp_ota_set_boot_partition(update_partition) == ESP_OK ) )
+  {
+    ESP_LOGI( TAG, "OTA Success?!\n Rebooting\n" );
+    fflush( stdout );
+
+    httpd_resp_set_status( req, HTTPD_200 );
+    httpd_resp_send( req, NULL, 0 );
+    
+    vTaskDelay( 2000 / portTICK_RATE_MS);
+    esp_restart();
+    
+    return ESP_OK;
+  }
+  ESP_LOGE( TAG, "OTA End failed (%s)!\n", esp_err_to_name(err));
+
+return_failure:
+  if ( update_handle )
+  {
+    esp_ota_abort(update_handle);
+  }
+
+  httpd_resp_set_status( req, HTTPD_500 );    // Assume failure
+  httpd_resp_send( req, NULL, 0 );
+  return ESP_FAIL;
+}
+
 /* Function to start the file server */
 esp_err_t start_file_server(const char *base_path)
 {
@@ -400,6 +539,25 @@ esp_err_t start_file_server(const char *base_path)
         .user_ctx  = server_data    // Pass server data as context
     };
     httpd_register_uri_handler(server, &file_delete);
+
+    static httpd_uri_t ota_post =
+    {
+      .uri       = "/ota",
+      .method    = HTTP_POST,
+      .handler   = _ota_post_handler,
+      .user_ctx  = NULL
+    };
+    httpd_register_uri_handler( server, &ota_post );
+    
+    static httpd_uri_t ota_get =
+    {
+      .uri       = "/ota",
+      .method    = HTTP_GET,
+      .handler   = _ota_get_handler,
+      .user_ctx  = NULL,
+    };
+    httpd_register_uri_handler( server, &ota_get );
+
 
     /* URI handler for getting uploaded files */
     httpd_uri_t file_download = {
