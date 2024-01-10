@@ -427,7 +427,7 @@ static void sd_write_proc(void*)
                 }
                 s_stats.sd_data += SD_WRITE_BLOCK_SIZE;
                 s_sd_file_size += SD_WRITE_BLOCK_SIZE;
-                if (s_sd_file_size > 10 * 1024 * 1024)
+                if (s_sd_file_size > 50 * 1024 * 1024)
                 {
                     LOG("Max file size reached: %d. Restarting session\n", s_sd_file_size);
                     done = true;

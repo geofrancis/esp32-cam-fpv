@@ -84,8 +84,8 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
     uint8_t ping = 0; //used for latency measurement
     int8_t wifi_power = 20;//dBm
     WIFI_Rate wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
-    uint8_t fec_codec_k = 2;
-    uint8_t fec_codec_n = 6;
+    uint8_t fec_codec_k = 6;
+    uint8_t fec_codec_n = 12;
     uint16_t fec_codec_mtu = AIR2GROUND_MTU;
     bool dvr_record = false;
 
@@ -93,7 +93,7 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
     {
         Resolution resolution = Resolution::SVGA;
         uint8_t fps_limit = 30;
-        uint8_t quality = 30;//0 - 63
+        uint8_t quality = 20;//0 - 63
         int8_t brightness = 0;//-2 - 2
         int8_t contrast = 0;//-2 - 2
         int8_t saturation = 1;//-2 - 2
@@ -105,14 +105,14 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
         uint8_t wb_mode = 0;//0 - 4
         bool aec = true;
         bool aec2 = true;
-        int8_t ae_level = 0;//-2 - 2
-        uint16_t aec_value = 0;//0 - 1200
-        bool agc = true;
+        int8_t ae_level = 1;//-2 - 2
+        uint16_t aec_value = 204;//0 - 1200
+        bool agc = false;
         uint8_t agc_gain = 0;//0 - 30
-        uint8_t gainceiling = 2;//0 - 6
+        uint8_t gainceiling = 3;//0 - 6
         bool bpc = true;
         bool wpc = true;
-        bool raw_gma = false;
+        bool raw_gma = true;
         bool lenc = true;
         bool hmirror = true;
         bool vflip = true;
