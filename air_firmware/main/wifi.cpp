@@ -57,6 +57,8 @@ IRAM_ATTR void add_to_wlan_incoming_queue(const void* data, size_t size)
 
 IRAM_ATTR void add_to_wlan_outgoing_queue(const void* data, size_t size)
 {
+    if (s_ground2air_config_packet.wifi_power == 0) return;
+
     Wlan_Outgoing_Packet packet;
 
     xSemaphoreTake(s_wlan_outgoing_mux, portMAX_DELAY);

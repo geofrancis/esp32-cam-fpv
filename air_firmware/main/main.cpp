@@ -603,6 +603,12 @@ static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, boo
             init_fec_codec(s_fec_encoder,src.fec_codec_k,src.fec_codec_n,src.fec_codec_mtu,true);
         }
     }
+    if (dst.wifi_channel != src.wifi_channel)
+    {
+        LOG("Wifi channel changed from %d to %d\n", (int)dst.wifi_channel, (int)src.wifi_channel);
+        ESP_ERROR_CHECK(esp_wifi_set_channel((int)src.wifi_channel, WIFI_SECOND_CHAN_NONE));
+    }
+
 
     if (forceCameraSettings || (dst.camera.resolution != src.camera.resolution))
     {
