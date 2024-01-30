@@ -63,6 +63,8 @@ https://user-images.githubusercontent.com/10252034/116135308-43c08c00-a6d1-11eb-
 
 The GS can run both with X11 and without. However, to run it without GS you need to compile SDL2 yourself to add support for kmsdrm:
 `git clone https://github.com/libsdl-org/SDL.git`\
+`git fetch`
+`git checkout SDL2`
 `cd SDL`\
 `mkdir build`\
 `cd build`\
