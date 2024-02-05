@@ -61,6 +61,12 @@ static size_t s_video_frame_data_size = 0;
 static uint32_t s_video_frame_index = 0;
 static uint8_t s_video_part_index = 0;
 static bool s_video_frame_started = false;
+static size_t s_video_full_frame_size = 0;
+
+static int s_quality = 20;
+static float s_quality_framesize_K1 = 1;
+static float s_quality_framesize_K2 = 1;
+static int s_max_frame_size = 0;
 
 static int64_t s_video_last_sent_tp = esp_timer_get_time();
 static int64_t s_video_last_acquired_tp = esp_timer_get_time();
@@ -68,7 +74,7 @@ static bool s_video_skip_frame = false;
 static int64_t s_video_target_frame_dt = 0;
 static uint8_t s_max_wlan_outgoing_queue_usage = 0;
 
-static WIFI_Rate s_curr_wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
+extern WIFI_Rate s_wlan_rate;
 
 /////////////////////////////////////////////////////////////////////////
 
@@ -87,6 +93,8 @@ static constexpr gpio_num_t FLASH_LED_PIN = GPIO_NUM_4;
 static bool s_dvr_record = false;
 
 
+//=============================================================================================
+//=============================================================================================
 void initialize_status_led()
 {
     gpio_config_t io_conf;
@@ -107,6 +115,8 @@ void initialize_status_led()
     gpio_config(&io_conf);
 }
 
+//=============================================================================================
+//=============================================================================================
 void initialize_rec_button()
 {
     gpio_config_t io_conf;
@@ -142,6 +152,8 @@ void set_status_led(bool enabled)
     }
 }
 
+//=============================================================================================
+//=============================================================================================
 void update_status_led()
 {
  /*
@@ -173,21 +185,23 @@ void update_status_led()
   }
 }
 
+//=============================================================================================
+//=============================================================================================
 void update_status_led_file_server()
 {
     bool b = (millis() & 0x2ff) > 0x180;
     set_status_led(b);
 }
 
-//=====================================================================
-//=====================================================================
+//=============================================================================================
+//=============================================================================================
 bool getButtonState()
 {
     return gpio_get_level((gpio_num_t)REC_BUTTON_PIN) == 0;
 }
 
-//=====================================================================
-//=====================================================================
+//=============================================================================================
+//=============================================================================================
 void checkButton()
 {
   static uint32_t debounceTime = millis() + 100;
@@ -224,8 +238,8 @@ auto _init_result2 = []() -> bool
 }();
 
 
-//===========================================================================================
-//===========================================================================================
+//=============================================================================================
+//=============================================================================================
 void init_failure()
 {
     printf("INIT FAILURE!\n");
@@ -370,6 +384,8 @@ static FILE* open_sd_file()
     return f;
 }
 
+//=============================================================================================
+//=============================================================================================
 //this will write data from the slow queue to file
 static void sd_write_proc(void*)
 {
@@ -448,6 +464,8 @@ static void sd_write_proc(void*)
     }
 }
 
+//=============================================================================================
+//=============================================================================================
 //this will move data from the fast queue to the slow queue
 static void sd_enqueue_proc(void*)
 {
@@ -511,12 +529,11 @@ IRAM_ATTR static void add_to_sd_fast_buffer(const void* data, size_t size)
 }
 
 #endif
-/////////////////////////////////////////////////////////////////////
 
 int16_t s_wlan_incoming_rssi = 0; //this is protected by the s_wlan_incoming_mux
 
-///////////////////////////////////////////////////////////////////////////////////////////
-
+//=============================================================================================
+//=============================================================================================
 IRAM_ATTR void packet_received_cb(void* buf, wifi_promiscuous_pkt_type_t type)
 {
     if (type == WIFI_PKT_MGMT)
@@ -580,8 +597,8 @@ IRAM_ATTR void packet_received_cb(void* buf, wifi_promiscuous_pkt_type_t type)
     s_stats.wlan_data_received += len;
 }
 
-/////////////////////////////////////////////////////////////////////////
-
+//=============================================================================================
+//=============================================================================================
 static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, bool forceCameraSettings)
 {
     Ground2Air_Config_Packet& dst = s_ground2air_config_packet;
@@ -642,7 +659,20 @@ static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, boo
         sensor_t* s = esp_camera_sensor_get(); \
         s->set_##n2(s, (type)src.camera.n1); \
     }
-    APPLY(quality, quality, int);
+
+    if ( src.camera.quality != 0 )
+    {
+        APPLY(quality, quality, int);
+    }
+    else
+    {
+        if ( forceCameraSettings )
+        {
+            sensor_t* s = esp_camera_sensor_get(); 
+            s->set_quality(s, 20); 
+        }
+    }
+
     APPLY(brightness, brightness, int);
     APPLY(contrast, contrast, int);
     APPLY(saturation, saturation, int);
@@ -701,6 +731,8 @@ static void handle_ground2air_data_packet(Ground2Air_Data_Packet& src)
 #endif
 }
 
+//=============================================================================================
+//=============================================================================================
 IRAM_ATTR void send_air2ground_video_packet(bool last)
 {
     if (last)
@@ -723,7 +755,7 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
     packet.size = s_video_frame_data_size + sizeof(Air2Ground_Video_Packet);
     packet.pong = s_ground2air_config_packet.ping;
     packet.wifi_queue = s_max_wlan_outgoing_queue_usage;
-    packet.curr_wifi_rate = s_curr_wifi_rate;
+    packet.curr_wifi_rate = s_wlan_rate;
     packet.crc = 0;
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_Video_Packet));
     if (!s_fec_encoder.flush_encode_packet(true))
@@ -737,6 +769,8 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
 //constexpr size_t MAX_TELEMETRY_PAYLOAD_SIZE = 512;
 constexpr size_t MAX_TELEMETRY_PAYLOAD_SIZE = 128;
 
+//=============================================================================================
+//=============================================================================================
 IRAM_ATTR void send_air2ground_data_packet()
 {
     uint8_t* packet_data = s_fec_encoder.get_encode_packet_data(true);
@@ -768,9 +802,109 @@ IRAM_ATTR void send_air2ground_data_packet()
 
 constexpr size_t MAX_VIDEO_DATA_PAYLOAD_SIZE = AIR2GROUND_MTU - sizeof(Air2Ground_Video_Packet);
 
+static const int WifiRateBandwidth[] = 
+{
+    2*1024*100, // 0 - RATE_B_2M_CCK,
+    2*1024*100, // 1 - RATE_B_2M_CCK_S,
+    5*1024*100, // 2 - RATE_B_5_5M_CCK,
+    5*1024*100, // 3 - RATE_B_5_5M_CCK_S,
+    11*1024*100, // 4 - RATE_B_11M_CCK,
+    11*1024*100, // 5 - RATE_B_11M_CCK_S,
+
+    6*1024*100, // 6 - RATE_G_6M_ODFM,
+    9*1024*100, // 7 - RATE_G_9M_ODFM,
+    12*1024*100, // 8 - RATE_G_12M_ODFM,
+    18*1024*100, // 9 - RATE_G_18M_ODFM,
+    24*1024*100,  // 10 - RATE_G_24M_ODFM,
+    36*1024*100,  // 11 - RATE_G_36M_ODFM,
+    48*1024*100,  // 12 - RATE_G_48M_ODFM,
+    54*1024*100,  // 13 - RATE_G_54M_ODFM,
+
+    6*1024*100, // 14 - RATE_N_6_5M_MCS0,
+    7*1024*100, // 15 - RATE_N_7_2M_MCS0_S,
+    13*1024*100, // 16 - RATE_N_13M_MCS1,
+    14*1024*100, // 17 - RATE_N_14_4M_MCS1_S,
+    19*1024*100, // 18 - RATE_N_19_5M_MCS2,
+    21*1024*100, // 19 - RATE_N_21_7M_MCS2_S,
+    26*1024*100, // 20 - RATE_N_26M_MCS3,
+    28*1024*100, // 21 - RATE_N_28_9M_MCS3_S,
+    39*1024*100, // 22 - RATE_N_39M_MCS4,
+    43*1024*100, // 23 - RATE_N_43_3M_MCS4_S,
+    52*1024*100, // 24 - RATE_N_52M_MCS5,
+    57*1024*100, // 25 - RATE_N_57_8M_MCS5_S,
+    58*1024*100, // 26 - RATE_N_58M_MCS6,
+    65*1024*100, // 27 - RATE_N_65M_MCS6_S,
+    65*1024*100, // 28 - RATE_N_65M_MCS7,
+    72*1024*100 // 29 - RATE_N_72M_MCS7_S,
+};
+
+
+IRAM_ATTR int getBandwidthForRate(WIFI_Rate rate)
+{
+    return WifiRateBandwidth[(int)rate];
+}
+
+//=============================================================================================
+//=============================================================================================
+IRAM_ATTR void recalculateFrameSizeQualityK(int video_full_frame_size)
+{
+    if ( video_full_frame_size > s_max_frame_size )
+    {
+        s_max_frame_size = video_full_frame_size;
+    }
+    if ( video_full_frame_size == 0 ) return;
+    if (s_ground2air_config_packet.camera.fps_limit == 0) return;
+
+    //data rate available with current wifi rate
+    int rateBandwidth = getBandwidthForRate(s_wlan_rate);
+    //decrease available data rate using FEC codec parameters
+    int FECbandwidth = rateBandwidth * s_ground2air_config_packet.fec_codec_k / s_ground2air_config_packet.fec_codec_n;
+
+    //1.2mb/sec is practical limit which works
+    if ( FECbandwidth > 1200*1024 ) FECbandwidth = 1200*1024;
+    
+    int frameSize = FECbandwidth / s_ground2air_config_packet.camera.fps_limit * 7 / 10;  //assume only  70% of total bandwidth is awailable in practice
+    if ( frameSize < 1 ) frameSize = 1;
+
+    float k = frameSize * 1.0f / video_full_frame_size;
+    if ( k > 1.1f ) k = 1.1f;
+
+    s_quality_framesize_K1 = s_quality_framesize_K1 * k;
+    if ( s_quality_framesize_K1 < 0.05f ) s_quality_framesize_K1 = 0.05f;
+    if ( s_quality_framesize_K1 > 1.0f ) s_quality_framesize_K1 = 1.0f;
+
+
+    int safe_frame_size = 40*1024 * 30 / s_ground2air_config_packet.camera.fps_limit;
+    s_quality_framesize_K2 = s_quality_framesize_K2 * safe_frame_size * 1.0f / video_full_frame_size;
+    if ( s_quality_framesize_K2 < 0.05f ) s_quality_framesize_K2 = 0.05f;
+    if ( s_quality_framesize_K2 > 1.0f ) s_quality_framesize_K2 = 1.0f;
+}
+
+//=============================================================================================
+//=============================================================================================
+IRAM_ATTR void applyAdaptiveQuality()
+{
+    if ( s_ground2air_config_packet.camera.quality != 0 ) return;
+
+    s_quality = (int)(8 + (63-8) * ( 1 - s_quality_framesize_K1 * s_quality_framesize_K2 ));
+
+    sensor_t* s = esp_camera_sensor_get(); 
+    s->set_quality(s, s_quality); 
+}
+
+
+//=============================================================================================
+//=============================================================================================
 IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_t count, bool last)
 {
     size_t stride=((cam_obj_t *)cam_obj)->dma_bytes_per_item;
+
+    if ( getOVFFlagAndReset() )
+    {
+        s_quality_framesize_K1 = 0.05;
+        s_quality_framesize_K2 = 0.05;
+        applyAdaptiveQuality();
+    }
 
     s_fec_encoder.lock();
     if (data == nullptr) //start frame
@@ -822,6 +956,7 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
 
                 count -= c;
                 s_video_frame_data_size += c;
+                s_video_full_frame_size += c;
 
                 size_t c8 = c >> 3;
                 for (size_t i = c8; i > 0; i--)
@@ -860,19 +995,22 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
 
             int64_t send_dt = now - s_video_last_sent_tp;
             if (send_dt < s_video_target_frame_dt) //limit fps
+            {
                 s_video_skip_frame = true;
+            }
             else                
             {
                 s_video_skip_frame = false;
                 s_video_last_sent_tp += std::max(s_video_target_frame_dt, acquire_dt);
             }
 
+/*
             //dynamically decrease fps
-            if ( s_wlan_outgoing_queue.size() > s_wlan_outgoing_queue.capacity() / 2)
+            if ( s_wlan_outgoing_queue.size() > s_wlan_outgoing_queue.capacity()  * 60 / 100)
             {
                 s_video_skip_frame = true;
             }
-
+*/
             //////////////////
 
             //LOG("Finish: %d %d\n", s_video_frame_index, s_video_frame_data_size);
@@ -883,12 +1021,21 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
             if ( !s_video_skip_frame) s_video_frame_index++;
             s_video_part_index = 0;
         }
+
+        if ( last && (s_video_full_frame_size > 0))
+        {
+            recalculateFrameSizeQualityK(s_video_full_frame_size);
+            applyAdaptiveQuality();
+            s_video_full_frame_size = 0;
+        }
     }
 
     s_fec_encoder.unlock();
     return count;
 }
 
+//=============================================================================================
+//=============================================================================================
 static void init_camera()
 {
     camera_config_t config;
@@ -930,6 +1077,8 @@ static void init_camera()
 
 //#define SHOW_CPU_USAGE
 
+//=============================================================================================
+//=============================================================================================
 static void print_cpu_usage()
 {
 #ifdef SHOW_CPU_USAGE
@@ -986,7 +1135,8 @@ static void print_cpu_usage()
 #endif
 }
 
-
+//=============================================================================================
+//=============================================================================================
 extern "C" void app_main()
 {
     Ground2Air_Data_Packet& ground2air_data_packet = s_ground2air_data_packet;
@@ -1126,11 +1276,15 @@ extern "C" void app_main()
         {
             s_max_wlan_outgoing_queue_usage = getMaxWlanOutgoingQueueUsage();
             s_stats_last_tp = millis();
-            LOG("WLAN S: %d, R: %d, E: %d, D: %d, %%: %d || FPS: %d, D: %d || SD D: %d, E: %d || TLM IN: %d OUT: %d\n",
+            LOG("WLAN S: %d, R: %d, E: %d, D: %d, %%: %d || FPS: %d, D: %d || SD D: %d, E: %d || TLM IN: %d OUT: %d || SK1: %d SK2: %d, Q: %d s: %d\n",
                 s_stats.wlan_data_sent, s_stats.wlan_data_received, s_stats.wlan_error_count, s_stats.wlan_received_packets_dropped, s_max_wlan_outgoing_queue_usage,
                 (int)s_stats.video_frames, s_stats.video_data, s_stats.sd_data, s_stats.sd_drops, 
-                s_stats.in_telemetry_data, s_stats.out_telemetry_data);
+                s_stats.in_telemetry_data, s_stats.out_telemetry_data,
+                (int)(s_quality_framesize_K1*100),  (int)(s_quality_framesize_K2*100), 
+                s_quality, s_max_frame_size); 
             print_cpu_usage();
+
+            s_max_frame_size = 0;
 
             s_stats = Stats();
         }
