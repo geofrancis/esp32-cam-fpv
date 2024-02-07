@@ -53,8 +53,6 @@ static int s_stats_last_tp = -10000;
 #define TXD2_PIN    12   //should be low at boot!!!
 #define RXD2_PIN    13 
 
-#define REC_BUTTON_PIN  3
-
 /////////////////////////////////////////////////////////////////////////
 
 static size_t s_video_frame_data_size = 0;
@@ -84,12 +82,6 @@ static int s_uart_verbose = 1;
 
 /////////////////////////////////////////////////////////////////////////
 
-static constexpr gpio_num_t STATUS_LED_PIN = GPIO_NUM_33;
-static constexpr uint8_t STATUS_LED_ON = 0;
-static constexpr uint8_t STATUS_LED_OFF = 1;
-
-static constexpr gpio_num_t FLASH_LED_PIN = GPIO_NUM_4;
-
 static bool s_dvr_record = false;
 
 
@@ -106,13 +98,14 @@ void initialize_status_led()
     gpio_config(&io_conf);
     gpio_set_level(STATUS_LED_PIN, STATUS_LED_OFF);
 
-
+#ifdef FLASH_LED_PIN
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = 1ULL << FLASH_LED_PIN;
     io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     gpio_config(&io_conf);
+#endif    
 }
 
 //=============================================================================================
@@ -142,14 +135,16 @@ void set_status_led(bool enabled)
 {
     gpio_set_level(STATUS_LED_PIN, enabled ? STATUS_LED_ON : STATUS_LED_OFF);
 
+#ifdef FLASH_LED_PIN
     if ( enabled) 
     {
-        gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLUP_ONLY);    // D1, needed in 4-line mode only
+        gpio_set_pull_mode(FLASH_LED_PIN, GPIO_PULLUP_ONLY);    // D1, needed in 4-line mode only
     }
     else
     {
-        gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);    // D1, needed in 4-line mode only
+        gpio_set_pull_mode(FLASH_LED_PIN, GPIO_PULLDOWN_ONLY);    // D1, needed in 4-line mode only
     }
+#endif    
 }
 
 //=============================================================================================
@@ -181,7 +176,12 @@ void update_status_led()
   }
   else
   {
+#ifdef DVR_SUPPORT    
     set_status_led(true);
+#else
+    bool b = (millis() & 0x7ff) > 0x400;
+    set_status_led(b);
+#endif
   }
 }
 
