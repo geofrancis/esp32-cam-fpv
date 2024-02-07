@@ -3,6 +3,7 @@
 #include "structures.h"
 #include "fec_codec.h"
 #include "crc.h"
+#include "lwip/inet.h"
 static const char * TAG="wifi_task";
 
 

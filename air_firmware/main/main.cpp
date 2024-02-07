@@ -19,12 +19,14 @@
 #include "esp_task_wdt.h"
 #include "esp_private/wifi.h"
 #include "esp_task_wdt.h"
+#include "esp_timer.h"
 //#include "bt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "driver/uart.h"
+#include <unistd.h>
 
 #include "fec_codec.h"
 #include "packets.h"
@@ -247,7 +249,7 @@ void init_failure()
     initialize_status_led();
     while( true )
     {
-        esp_task_wdt_reset();
+        //esp_task_wdt_reset();
 
         bool b = (millis() & 0x7f) > 0x40;
         set_status_led(b);
@@ -353,7 +355,7 @@ static bool init_sd()
     char buffer[64];
     for (uint32_t i = 0; i < 100000; i++)
     {
-        sprintf(buffer, "/sdcard/v%03d_000.mpg", i);
+        sprintf(buffer, "/sdcard/v%03lu_000.mpg", i);
         FILE* f = fopen(buffer, "rb");
         if (f)
         {
@@ -370,7 +372,7 @@ static bool init_sd()
 static FILE* open_sd_file()
 {
     char buffer[64];
-    sprintf(buffer, "/sdcard/v%03d_%03d.mpg", s_sd_next_session_id, s_sd_next_segment_id);
+    sprintf(buffer, "/sdcard/v%03lu_%03lu.mpg", s_sd_next_session_id, s_sd_next_segment_id);
     FILE* f = fopen(buffer, "wb");
     if (!f){
         LOG("error to open sdcard session %s!\n",buffer);
@@ -1139,6 +1141,8 @@ static void print_cpu_usage()
 //=============================================================================================
 extern "C" void app_main()
 {
+    //esp_task_wdt_init();
+
     Ground2Air_Data_Packet& ground2air_data_packet = s_ground2air_data_packet;
     ground2air_data_packet.type = Ground2Air_Header::Type::Telemetry;
     ground2air_data_packet.size = sizeof(ground2air_data_packet);
@@ -1222,7 +1226,7 @@ extern "C" void app_main()
         while (true)
         {
             vTaskDelay(1);
-            esp_task_wdt_reset();
+            //esp_task_wdt_reset();
 
             update_status_led_file_server();
         }
@@ -1290,7 +1294,7 @@ extern "C" void app_main()
         }
 
         vTaskDelay(10);
-        esp_task_wdt_reset();
+        //esp_task_wdt_reset();
 
         update_status_led();
 
