@@ -5,8 +5,10 @@
 
 
 //===============================================================
-
+/*
 //For esp32cam
+#define BOARD_ESP32CAM
+
 #define CAMERA_MODEL_AI_THINKER
 #define DVR_SUPPORT
 //define to use mavlink telemetry on UART2 pins 13/14
@@ -17,19 +19,24 @@
 #define STATUS_LED_OFF 1
 #define FLASH_LED_PIN GPIO_NUM_4
 #define REC_BUTTON_PIN  3
+*/
 
-/*
 //===============================================================
 //===============================================================
 //for XIAO ESP32S3 Sense
+#define BOARD_XIAOS3SENSE
+
 #define CAMERA_MODEL_XIAO_ESP32S3
-#define STATUS_LED_PIN GPIO_NUM_21
+#define DVR_SUPPORT
+//#define STATUS_LED_PIN GPIO_NUM_21 shared with CD Card CS
 #define STATUS_LED_ON 0
 #define STATUS_LED_OFF 1
 #define REC_BUTTON_PIN  3
 
+
+
 //===============================================================
-*/
+
 
 #define DEFAULT_WIFI_CHANNEL 11
 extern uint16_t g_wifi_channel;

@@ -84,13 +84,15 @@ static int s_uart_verbose = 1;
 
 /////////////////////////////////////////////////////////////////////////
 
-static bool s_dvr_record = false;
+ sdmmc_card_t* card = nullptr;
+static bool s_dvr_record = true;
 
 
 //=============================================================================================
 //=============================================================================================
 void initialize_status_led()
 {
+#ifdef STATUS_LED_PIN
     gpio_config_t io_conf;
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_OUTPUT;
@@ -99,6 +101,7 @@ void initialize_status_led()
     io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
     gpio_config(&io_conf);
     gpio_set_level(STATUS_LED_PIN, STATUS_LED_OFF);
+#endif    
 
 #ifdef FLASH_LED_PIN
     io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -135,7 +138,9 @@ IRAM_ATTR uint64_t millis()
 
 void set_status_led(bool enabled)
 {
+#ifdef STATUS_LED_PIN
     gpio_set_level(STATUS_LED_PIN, enabled ? STATUS_LED_ON : STATUS_LED_OFF);
+#endif    
 
 #ifdef FLASH_LED_PIN
     if ( enabled) 
@@ -300,7 +305,9 @@ static void shutdown_sd()
     if (!s_sd_initialized)
         return;
     LOG("close sd card!\n");
-    esp_vfs_fat_sdmmc_unmount();
+    
+    esp_vfs_fat_sdcard_unmount("/sdcard",card);
+
     s_sd_initialized = false;
 
     //to turn the LED off
@@ -312,8 +319,7 @@ static bool init_sd()
     if (s_sd_initialized)
         return true;
 
-    sdmmc_card_t* card = nullptr;
-
+#ifdef BOARD_ESP32CAM
     esp_vfs_fat_sdmmc_mount_config_t mount_config;
 #ifdef CAMERA_MODEL_ESP_VTX
     mount_config.format_if_mount_failed = true;
@@ -324,6 +330,9 @@ static bool init_sd()
     mount_config.allocation_unit_size = 0;
 
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    // By default, SD card frequency is initialized to SDMMC_FREQ_DEFAULT (20MHz)
+    // For setting a specific frequency, use host.max_freq_khz (range 400kHz - 20MHz for SDSPI)
+    // Example: for fixed frequency of 10MHz, use host.max_freq_khz = 10000;    
     //host.max_freq_khz = SDMMC_FREQ_PROBING;
     host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
     host.flags = SDMMC_HOST_FLAG_1BIT;
@@ -347,9 +356,51 @@ static bool init_sd()
         gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);    // D1, needed in 4-line mode only
         return false;
     }
+#endif
+#ifdef BOARD_XIAOS3SENSE
+    esp_vfs_fat_sdmmc_mount_config_t mount_config;
+    mount_config.format_if_mount_failed = false;
+    mount_config.max_files = 2;
+    mount_config.allocation_unit_size = 0;
+
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+//    host.max_freq_khz = SDMMC_FREQ_PROBING;// SDMMC_FREQ_HIGHSPEED;
+
+    spi_bus_config_t bus_cfg = {
+        .mosi_io_num = 9,
+        .miso_io_num = 8,
+        .sclk_io_num = 7,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = 4092
+    };
+    esp_err_t ret = spi_bus_initialize((spi_host_device_t)host.slot, &bus_cfg, SDSPI_DEFAULT_DMA);
+    if (ret != ESP_OK) 
+    {
+        LOG("Failed to initialize SD SPI bus.");
+        return false;
+    }
+
+    // This initializes the slot without card detect (CD) and write protect (WP) signals.
+    // Modify slot_config.gpio_cd and slot_config.gpio_wp if your board has these signals.
+    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_config.gpio_cs = GPIO_NUM_21;
+    slot_config.host_id = (spi_host_device_t)host.slot;
+
+    LOG("Mounting SD card...\n");
+    ret = esp_vfs_fat_sdspi_mount("/sdcard", &host, &slot_config, &mount_config, &card);
+    if (ret != ESP_OK)
+    {
+        LOG("Failed to mount SD card VFAT filesystem. Error: %s\n", esp_err_to_name(ret));
+        return false;
+    }
+#endif
 
     LOG("sd card inited!\n");
     s_sd_initialized = true;
+
+    // Card has been initialized, print its properties
+    sdmmc_card_print_info(stdout, card);
 
     //find the latest file number
     char buffer[64];
@@ -445,7 +496,7 @@ static void sd_write_proc(void*)
                 }
                 s_stats.sd_data += SD_WRITE_BLOCK_SIZE;
                 s_sd_file_size += SD_WRITE_BLOCK_SIZE;
-                if (s_sd_file_size > 50 * 1024 * 1024)
+                if (s_sd_file_size > 10 * 1024 * 1024)
                 {
                     LOG("Max file size reached: %d. Restarting session\n", s_sd_file_size);
                     done = true;
@@ -1142,6 +1193,8 @@ static void print_cpu_usage()
 extern "C" void app_main()
 {
     //esp_task_wdt_init();
+
+            vTaskDelay(5000 / portTICK_PERIOD_MS);
 
     Ground2Air_Data_Packet& ground2air_data_packet = s_ground2air_data_packet;
     ground2air_data_packet.type = Ground2Air_Header::Type::Telemetry;
