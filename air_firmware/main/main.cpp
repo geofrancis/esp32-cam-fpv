@@ -968,7 +968,15 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
     {
         if (!s_video_skip_frame)
         {
+
+#ifdef BOARD_ESP32CAM
+            //ESP32 - sample offset: 2, stride: 4
             const uint8_t* src = (const uint8_t*)data + 2;  // jump to the sample1 of DMA element
+#endif
+#ifdef BOARD_XIAOS3SENSE
+            //ESP32S3 - sample offset: 0, stride: 1
+            const uint8_t* src = (const uint8_t*)data;
+#endif
             count /= stride;
             if (last) //find the end marker for JPEG. Data after that can be discarded
             {
@@ -1011,6 +1019,7 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
                 s_video_frame_data_size += c;
                 s_video_full_frame_size += c;
 
+
                 size_t c8 = c >> 3;
                 for (size_t i = c8; i > 0; i--)
                 {
@@ -1027,6 +1036,7 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
                 {
                     *ptr++ = *src; src += stride;
                 }
+
 #ifdef DVR_SUPPORT
                 if (s_dvr_record)
                     add_to_sd_fast_buffer(start_ptr, c);
