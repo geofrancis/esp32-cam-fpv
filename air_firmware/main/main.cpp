@@ -47,14 +47,6 @@ uint16_t g_wifi_channel;
 static int s_stats_last_tp = -10000;
 
 
-//Debug UART0
-#define TXD0_PIN    1
-#define RXD0_PIN    4  //move from pin 3 to pin 4 to free pin 3 for a REC button
-
-//Mavlink UART2
-#define TXD2_PIN    12   //should be low at boot!!!
-#define RXD2_PIN    13 
-
 /////////////////////////////////////////////////////////////////////////
 
 static size_t s_video_frame_data_size = 0;
@@ -496,7 +488,7 @@ static void sd_write_proc(void*)
                 }
                 s_stats.sd_data += SD_WRITE_BLOCK_SIZE;
                 s_sd_file_size += SD_WRITE_BLOCK_SIZE;
-                if (s_sd_file_size > 10 * 1024 * 1024)
+                if (s_sd_file_size > 50 * 1024 * 1024)
                 {
                     LOG("Max file size reached: %d. Restarting session\n", s_sd_file_size);
                     done = true;
@@ -690,7 +682,9 @@ static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, boo
             case Resolution::CIF: s->set_framesize(s, FRAMESIZE_CIF); break;
             case Resolution::HVGA: s->set_framesize(s, FRAMESIZE_HVGA); break;
             case Resolution::VGA: s->set_framesize(s, FRAMESIZE_VGA); break;
-            case Resolution::SVGA: s->set_framesize(s, FRAMESIZE_SVGA); break;
+            case Resolution::SVGA: s->set_framesize(s, FRAMESIZE_SVGA); 
+      //s->set_res_raw(s, 1/*OV2640_MODE_SVGA*/,0,0,0, 0, 72, 800, 600-144, 800,600-144,false,false);
+            break;
             case Resolution::XGA: s->set_framesize(s, FRAMESIZE_XGA); break;
             case Resolution::SXGA: s->set_framesize(s, FRAMESIZE_SXGA); break;
             case Resolution::UXGA: s->set_framesize(s, FRAMESIZE_UXGA); break;
@@ -1245,6 +1239,7 @@ extern "C" void app_main()
 
 #endif
 
+#ifdef BOARD_ESP32CAM
     //init debug uart
     uart_config_t uart_config0 = {
         .baud_rate = 115200,
@@ -1259,6 +1254,7 @@ extern "C" void app_main()
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config0) );
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 256, 256, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, TXD0_PIN, RXD0_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+#endif
 
     //reinitialize rec button after configuring uarts
     initialize_rec_button();
@@ -1325,6 +1321,24 @@ extern "C" void app_main()
     ESP_ERROR_CHECK(uart_param_config(UART_NUM_2, &uart_config2) );
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_2, MAX_TELEMETRY_PAYLOAD_SIZE + 1024, 256, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_set_pin(UART_NUM_2, TXD2_PIN, RXD2_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+
+#endif
+
+#ifdef UART_MSP_OSD
+
+    uart_config_t uart_config1 = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .rx_flow_ctrl_thresh = 122,
+        .source_clk = UART_SCLK_APB
+    };  
+    // Configure UART parameters
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config1) );
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, MAX_TELEMETRY_PAYLOAD_SIZE + 1024, 256, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, TXD1_PIN, RXD1_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
 #endif
 

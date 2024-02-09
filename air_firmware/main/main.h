@@ -11,29 +11,49 @@
 
 #define CAMERA_MODEL_AI_THINKER
 #define DVR_SUPPORT
+
 //define to use mavlink telemetry on UART2 pins 13/14
 #define UART_MAVLINK
+//Mavlink UART2
+#define TXD2_PIN    12   //should be low at boot!!!
+#define RXD2_PIN    13 
 
 #define STATUS_LED_PIN GPIO_NUM_33
 #define STATUS_LED_ON 0
 #define STATUS_LED_OFF 1
 #define FLASH_LED_PIN GPIO_NUM_4
 #define REC_BUTTON_PIN  3
+
+//Debug UART0
+#define TXD0_PIN    1
+#define RXD0_PIN    4  //move from pin 3 to pin 4 to free pin 3 for a REC button
 */
 
 //===============================================================
 //===============================================================
 //for XIAO ESP32S3 Sense
+//https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/res/XIAO_ESP32S3_SCH_v1.1.pdf
+//https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/res/XIAO_ESP32S3_ExpBoard_v1.0_SCH.pdf
+
 #define BOARD_XIAOS3SENSE
 
 #define CAMERA_MODEL_XIAO_ESP32S3
 #define DVR_SUPPORT
-//#define STATUS_LED_PIN GPIO_NUM_21 shared with CD Card CS
-#define STATUS_LED_ON 0
-#define STATUS_LED_OFF 1
-#define REC_BUTTON_PIN  3
+#define STATUS_LED_PIN GPIO_NUM_1
+#define STATUS_LED_ON 1
+#define STATUS_LED_OFF 0
+#define REC_BUTTON_PIN  0
+
+#define UART_MAVLINK
+//Mavlink UART2
+#define TXD2_PIN    43 
+#define RXD2_PIN    44 
 
 
+#define UART_MSP_OSD
+//UART1 OSD
+#define TXD1_PIN    2 
+#define RXD1_PIN    4 
 
 //===============================================================
 
@@ -174,7 +194,7 @@ extern uint16_t g_wifi_channel;
 #define HREF_GPIO_NUM     47
 #define PCLK_GPIO_NUM     13
 
-#define LED_GPIO_NUM      21
+#define LED_GPIO_NUM      21  //also used as SDCard CS
 #else
 #error "Camera model not selected"
 #endif
