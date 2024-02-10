@@ -78,6 +78,7 @@ static int s_uart_verbose = 1;
 
  sdmmc_card_t* card = nullptr;
 static bool s_dvr_record = true;
+static bool s_shouldRestart = false;
 
 
 //=============================================================================================
@@ -350,13 +351,17 @@ static bool init_sd()
     }
 #endif
 #ifdef BOARD_XIAOS3SENSE
+/*
     esp_vfs_fat_sdmmc_mount_config_t mount_config;
     mount_config.format_if_mount_failed = false;
     mount_config.max_files = 2;
     mount_config.allocation_unit_size = 0;
 
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-//    host.max_freq_khz = SDMMC_FREQ_PROBING;// SDMMC_FREQ_HIGHSPEED;
+    //host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+    //host.max_freq_khz = SDMMC_FREQ_PROBING;
+    //host.max_freq_khz = SDMMC_FREQ_DEFAULT;
+    //host.max_freq_khz = 26000;
 
     spi_bus_config_t bus_cfg = {
         .mosi_io_num = 9,
@@ -372,6 +377,7 @@ static bool init_sd()
         LOG("Failed to initialize SD SPI bus.");
         return false;
     }
+    //host.set_card_clk(host.slot, 10000);
 
     // This initializes the slot without card detect (CD) and write protect (WP) signals.
     // Modify slot_config.gpio_cd and slot_config.gpio_wp if your board has these signals.
@@ -386,6 +392,41 @@ static bool init_sd()
         LOG("Failed to mount SD card VFAT filesystem. Error: %s\n", esp_err_to_name(ret));
         return false;
     }
+*/ 
+    esp_vfs_fat_sdmmc_mount_config_t mount_config;
+    mount_config.format_if_mount_failed = false;
+    mount_config.max_files = 2;
+    mount_config.allocation_unit_size = 0;
+
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    // By default, SD card frequency is initialized to SDMMC_FREQ_DEFAULT (20MHz)
+    // For setting a specific frequency, use host.max_freq_khz (range 400kHz - 20MHz for SDSPI)
+    // Example: for fixed frequency of 10MHz, use host.max_freq_khz = 10000;    
+    //host.max_freq_khz = SDMMC_FREQ_PROBING;
+    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+    host.flags = SDMMC_HOST_FLAG_1BIT;
+
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot_config.width = 1;
+    slot_config.clk = GPIO_NUM_7;
+    slot_config.cmd = GPIO_NUM_9;
+    slot_config.d0 = GPIO_NUM_8;
+
+    // Enable internal pullups on enabled pins. The internal pullups
+    // are insufficient however, please make sure 10k external pullups are
+    // connected on the bus. This is for debug / example purpose only.
+    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+    
+    LOG("Mounting SD card...\n");
+    esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
+    if (ret != ESP_OK)
+    {
+        LOG("Failed to mount SD card VFAT filesystem. Error: %s\n", esp_err_to_name(ret));
+        //to turn the LED off
+        gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);    // D1, needed in 4-line mode only
+        return false;
+    }
+
 #endif
 
     LOG("sd card inited!\n");
@@ -473,26 +514,35 @@ static void sd_write_proc(void*)
                     break;
                 }
 
+                if ( s_shouldRestart ) 
+                {
+                    s_shouldRestart = false;
+                    done = true;
+                }
+
                 xSemaphoreTake(s_sd_slow_buffer_mux, portMAX_DELAY);
                 bool read = s_sd_slow_buffer->read(block, SD_WRITE_BLOCK_SIZE);
                 xSemaphoreGive(s_sd_slow_buffer_mux);
                 if (!read)
                     break; //not enough data, wait
 
-                if (fwrite(block, SD_WRITE_BLOCK_SIZE, 1, f) == 0)
+                if ( !done )
                 {
-                    LOG("Error while writing! Stopping session\n");
-                    done = true;
-                    error = true;
-                    break;
-                }
-                s_stats.sd_data += SD_WRITE_BLOCK_SIZE;
-                s_sd_file_size += SD_WRITE_BLOCK_SIZE;
-                if (s_sd_file_size > 50 * 1024 * 1024)
-                {
-                    LOG("Max file size reached: %d. Restarting session\n", s_sd_file_size);
-                    done = true;
-                    break;
+                    if (fwrite(block, SD_WRITE_BLOCK_SIZE, 1, f) == 0)
+                    {
+                        LOG("Error while writing! Stopping session\n");
+                        done = true;
+                        error = true;
+                        break;
+                    }
+                    s_stats.sd_data += SD_WRITE_BLOCK_SIZE;
+                    s_sd_file_size += SD_WRITE_BLOCK_SIZE;
+                    if (s_sd_file_size > 50 * 1024 * 1024)
+                    {
+                        LOG("Max file size reached: %d. Restarting session\n", s_sd_file_size);
+                        done = true;
+                        break;
+                    }
                 }
             }
         }
@@ -671,7 +721,6 @@ static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, boo
         ESP_ERROR_CHECK(esp_wifi_set_channel((int)src.wifi_channel, WIFI_SECOND_CHAN_NONE));
     }
 
-
     if (forceCameraSettings || (dst.camera.resolution != src.camera.resolution))
     {
         LOG("Camera resolution changed from %d to %d\n", (int)dst.camera.resolution, (int)src.camera.resolution);
@@ -689,6 +738,8 @@ static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, boo
             case Resolution::SXGA: s->set_framesize(s, FRAMESIZE_SXGA); break;
             case Resolution::UXGA: s->set_framesize(s, FRAMESIZE_UXGA); break;
         }
+
+        s_shouldRestart = true;
     }
     if (dst.camera.fps_limit != src.camera.fps_limit)
     {
@@ -910,7 +961,7 @@ IRAM_ATTR void recalculateFrameSizeQualityK(int video_full_frame_size)
     //1.2mb/sec is practical limit which works
     if ( FECbandwidth > 1200*1024 ) FECbandwidth = 1200*1024;
     
-    int frameSize = FECbandwidth / s_ground2air_config_packet.camera.fps_limit * 7 / 10;  //assume only  70% of total bandwidth is awailable in practice
+    int frameSize = FECbandwidth / s_ground2air_config_packet.camera.fps_limit * 7 / 10;  //assume only  70% of total bandwidth is available in practice
     if ( frameSize < 1 ) frameSize = 1;
 
     float k = frameSize * 1.0f / video_full_frame_size;
@@ -1198,7 +1249,7 @@ extern "C" void app_main()
 {
     //esp_task_wdt_init();
 
-            vTaskDelay(5000 / portTICK_PERIOD_MS);
+            vTaskDelay(10000 / portTICK_PERIOD_MS);
 
     Ground2Air_Data_Packet& ground2air_data_packet = s_ground2air_data_packet;
     ground2air_data_packet.type = Ground2Air_Header::Type::Telemetry;
@@ -1353,13 +1404,14 @@ extern "C" void app_main()
 
     while (true)
     {
-        if (s_uart_verbose > 0 && millis() - s_stats_last_tp >= 1000)
+        int dt = millis() - s_stats_last_tp;
+        if (s_uart_verbose > 0 && (dt >= 1000))
         {
             s_max_wlan_outgoing_queue_usage = getMaxWlanOutgoingQueueUsage();
             s_stats_last_tp = millis();
             LOG("WLAN S: %d, R: %d, E: %d, D: %d, %%: %d || FPS: %d, D: %d || SD D: %d, E: %d || TLM IN: %d OUT: %d || SK1: %d SK2: %d, Q: %d s: %d\n",
                 s_stats.wlan_data_sent, s_stats.wlan_data_received, s_stats.wlan_error_count, s_stats.wlan_received_packets_dropped, s_max_wlan_outgoing_queue_usage,
-                (int)s_stats.video_frames, s_stats.video_data, s_stats.sd_data, s_stats.sd_drops, 
+                (int)(s_stats.video_frames)* 1000 / dt, s_stats.video_data, s_stats.sd_data, s_stats.sd_drops, 
                 s_stats.in_telemetry_data, s_stats.out_telemetry_data,
                 (int)(s_quality_framesize_K1*100),  (int)(s_quality_framesize_K2*100), 
                 s_quality, s_max_frame_size); 

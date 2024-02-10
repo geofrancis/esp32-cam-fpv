@@ -93,8 +93,8 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
     struct Camera
     {
         Resolution resolution = Resolution::SVGA;
-        uint8_t fps_limit = 30;
-        uint8_t quality = 20;//0 - 63
+        uint8_t fps_limit = 35;
+        uint8_t quality = 0;//0 - 63
         int8_t brightness = 0;//-2 - 2
         int8_t contrast = 0;//-2 - 2
         int8_t saturation = 1;//-2 - 2
@@ -115,8 +115,8 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
         bool wpc = true;
         bool raw_gma = true;
         bool lenc = true;
-        bool hmirror = true;
-        bool vflip = true;
+        bool hmirror = false;
+        bool vflip = false;
         bool dcw = true;
     };
     Camera camera;
