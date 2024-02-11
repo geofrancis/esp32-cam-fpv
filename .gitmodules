@@ -3,11 +3,6 @@
 	path = gs/src/imgui
 	url = https://github.com/ocornut/imgui.git
 
-[submodule "air_firmware_esp32cam/components/esp32-camera"]
-	path = air_firmware_esp32cam/components/esp32-camera
+[submodule "components/esp32-camera"]
+	path = components/esp32-camera
 	url = https://github.com/RomanLut/esp32-camera.git
-
-[submodule "air_firmware_esp32s3sense/components/esp32-camera"]
-	path = air_firmware_esp32s3sense/components/esp32-camera
-	url = https://github.com/RomanLut/esp32-camera.git
-
