@@ -333,12 +333,12 @@ static bool init_sd()
     gpio_set_pull_mode((gpio_num_t)14, GPIO_PULLUP_ONLY);   // CLK, needed in 4-line mode only
     gpio_set_pull_mode((gpio_num_t)15, GPIO_PULLUP_ONLY);   // CMD
     gpio_set_pull_mode((gpio_num_t)2, GPIO_PULLUP_ONLY);    // D0
-    gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);  // D1, needed in 4-line mode only
-    gpio_set_pull_mode((gpio_num_t)12, GPIO_PULLUP_ONLY);   // D2, needed in 4-line mode only
-    gpio_set_pull_mode((gpio_num_t)13, GPIO_PULLUP_ONLY);   // D3, needed in 4-line mode only
+    //gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);  // D1, needed in 4-line mode only
+    //gpio_set_pull_mode((gpio_num_t)12, GPIO_PULLUP_ONLY);   // D2, needed in 4-line mode only
+    //gpio_set_pull_mode((gpio_num_t)13, GPIO_PULLUP_ONLY);   // D3, needed in 4-line mode only
 
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-    //slot_config.width = 1;
+    slot_config.width = 1;
 
     LOG("Mounting SD card...\n");
     esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
@@ -1249,7 +1249,9 @@ extern "C" void app_main()
 {
     //esp_task_wdt_init();
 
-            vTaskDelay(10000 / portTICK_PERIOD_MS);
+#ifdef BOARD_XIAOS3SENSE
+    vTaskDelay(10000 / portTICK_PERIOD_MS);  //to see init messages
+#endif    
 
     Ground2Air_Data_Packet& ground2air_data_packet = s_ground2air_data_packet;
     ground2air_data_packet.type = Ground2Air_Header::Type::Telemetry;

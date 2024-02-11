@@ -5,9 +5,8 @@
 
 
 //===============================================================
-/*
 //For esp32cam
-#define BOARD_ESP32CAM
+#ifdef BOARD_ESP32CAM
 
 #define CAMERA_MODEL_AI_THINKER
 #define DVR_SUPPORT
@@ -27,7 +26,8 @@
 //Debug UART0
 #define TXD0_PIN    1
 #define RXD0_PIN    4  //move from pin 3 to pin 4 to free pin 3 for a REC button
-*/
+
+#endif
 
 //===============================================================
 //===============================================================
@@ -35,7 +35,7 @@
 //https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/res/XIAO_ESP32S3_SCH_v1.1.pdf
 //https://files.seeedstudio.com/wiki/SeeedStudio-XIAO-ESP32S3/res/XIAO_ESP32S3_ExpBoard_v1.0_SCH.pdf
 
-#define BOARD_XIAOS3SENSE
+#ifdef BOARD_XIAOS3SENSE
 
 #define CAMERA_MODEL_XIAO_ESP32S3
 #define DVR_SUPPORT
@@ -49,12 +49,12 @@
 #define TXD2_PIN    43 
 #define RXD2_PIN    44 
 
-
 #define UART_MSP_OSD
 //UART1 OSD
 #define TXD1_PIN    2 
 #define RXD1_PIN    4 
 
+#endif
 //===============================================================
 
 
