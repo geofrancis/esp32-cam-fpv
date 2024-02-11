@@ -5,6 +5,10 @@
 		},
 		{
 			"name": "lib",
+			"path": "../components/air/"
+		},
+		{
+			"name": "lib",
 			"path": "../components/common/"
 		}
 	],

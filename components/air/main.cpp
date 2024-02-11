@@ -439,7 +439,7 @@ static bool init_sd()
     char buffer[64];
     for (uint32_t i = 0; i < 100000; i++)
     {
-        sprintf(buffer, "/sdcard/v%03lu_000.mpg", i);
+        sprintf(buffer, "/sdcard/v%03lu_000.mpg", (long unsigned int)i);
         FILE* f = fopen(buffer, "rb");
         if (f)
         {
@@ -456,7 +456,7 @@ static bool init_sd()
 static FILE* open_sd_file()
 {
     char buffer[64];
-    sprintf(buffer, "/sdcard/v%03lu_%03lu.mpg", s_sd_next_session_id, s_sd_next_segment_id);
+    sprintf(buffer, "/sdcard/v%03lu_%03lu.mpg", (long unsigned int)s_sd_next_session_id, (long unsigned int)s_sd_next_segment_id);
     FILE* f = fopen(buffer, "wb");
     if (!f){
         LOG("error to open sdcard session %s!\n",buffer);
