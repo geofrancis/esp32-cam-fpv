@@ -475,7 +475,7 @@ static FILE* open_sd_file()
 //this will write data from the slow queue to file
 static void sd_write_proc(void*)
 {
-    uint8_t* block = new uint8_t[SD_WRITE_BLOCK_SIZE];
+    uint8_t* block = (uint8_t*)heap_caps_malloc(SD_WRITE_BLOCK_SIZE, MALLOC_CAP_INTERNAL);//new uint8_t[SD_WRITE_BLOCK_SIZE];
 
     while (true)
     {
