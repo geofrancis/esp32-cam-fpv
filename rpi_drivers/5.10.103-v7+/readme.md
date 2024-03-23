@@ -1,4 +1,4 @@
-Building image for Raspberry Pi Zero 2W with monitor mode support on internal wireless card(broadcom 43430,43436,43455)
+Building Buster 32bit image for Raspberry Pi Zero W / Zero 2W with monitor mode support on internal wireless card (broadcom 43430,43436,43455)
 
 For Linux kernel 5.10.103-v7+ only!
 
@@ -14,7 +14,7 @@ https://downloads.raspberrypi.org/raspios_full_armhf/images/raspios_full_armhf-2
 
 Update to kernel 5.10.103-v7+:
 
-```sudo apt-get update && apt-get full-upgrade```
+```sudo apt-get update && apt-get upgrade```
 
 Check kernel version:
 
@@ -35,6 +35,10 @@ Edit ```install.sh```, find section ```Uncomment right version of the card here`
 This part a little bit misterios for me. It seems that there are multiple versions of firmware, and patches for the different firmwares overwrite the same binary file in the kernel. You have to build only correct one.
 ```bcm43430a1/7_45_41_46/``` worked for me.
 
+Current firmware version can be seen using:
+```dmesg | grep brcmfmac```
+You probably have to choose closest lower of higher version.
+
 
 ```./install.sh```
 
@@ -45,11 +49,14 @@ Check log if everything is went correctly.
 ```reboot```.
 
 
+modinfo -F filename brcmfmac
+xz /lib/modules/5.10.103-v7+/kernel/drivers/net/wireless/broadcom/brcm80211/brcmfmac/brcmfmac.ko
+
 Checking
 -
-```sudo install airckrack-ng```
+```sudo apt-ger install airckrack-ng```
 
-```sudo install wireshark tcpdump```
+```sudo apt-get install wireshark tcpdump```
 
 ```sudo airmon-ng start wlan0```
 
@@ -65,7 +72,7 @@ Checking
 
 or ```tcpdump -i wlan0mon```
 
-If no packets are received, uncomment other folder in script ad run again.
+If no packets are received, uncomment other folder in script and run again.
 
 Building for other kernel versions
 -
