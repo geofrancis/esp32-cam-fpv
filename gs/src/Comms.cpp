@@ -12,6 +12,7 @@
 #include "Log.h"
 #include "Pool.h"
 #include "structures.h"
+#include <algorithm>
 
 //#define DEBUG_PCAP
 

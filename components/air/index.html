@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ESP-VTX Configuration</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 0;
+            padding: 0;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        table {
+            width: 100%;
+            height:100%;
+            overflow-y: scroll;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        tr:hover {background-color: #f5f5f5;}
+
+        button {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            margin-bottom: 0;
+            font-size: 1rem;
+            font-weight: 400;
+            line-height: 1;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: middle;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-radius: 0.5rem;
+            transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+            color: #fff;
+            background-color: #007bff;
+            border-color: #007bff;
+        }
+
+        button:hover {
+            color: #fff;
+            background-color: #0069d9;
+            border-color: #0062cc;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <span>Wifi Channel:</span>
+        <select>
+        </select>
+        <input id="default_dvr" type="checkbox" name="default_dvr" value="enable">default_dvr_enable
+        <button onclick="submitForm()">Save</button>
+    </div>
+    <div>
+        <a href=""></a>
+        <table id="fileList">
+            <thead> 
+                <tr>
+                    <th>Name</th>
+                    <th>Size</th>
+                    <th>Delete</th>
+                </tr>
+            </thead>
+            <tbody id="fileRows">
+        
+            </tbody>
+        </table>
+    </div>
+ 
+<script>
+    function delete_file(filename) {
+        var data = {"name":filename};  
+        fetch('/delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data),
+        }).then(response => response.json())
+        .then(data => console.log('Success:', data))
+        .catch((error) => console.log('Error:', error));
+    }
+
+    function submitForm() {
+    var data = {};
+    data["channel"] = document.querySelector('select').value.toString();
+    data["default_dvr"] = document.getElementById("default_dvr").checked?"true":"false";
+    var jsonData = JSON.stringify(data);
+    console.log(jsonData);
+    fetch('/configs', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: jsonData,
+    })
+    .then(response => response.json())
+    .then(data => console.log('Success:', data))
+    .catch((error) => console.log('Error:', error));
+}
+
+    document.addEventListener("DOMContentLoaded", function () {
+    fetch("/file_list")
+        .then(response => response.json())
+        .then(data => {
+            let table = document.getElementById("fileList");
+            let tbody = document.getElementById("fileRows");
+
+            for(let i=0; i<data.length; i++) {
+                let row = `<tr><td><a href="${data[i].name}">${data[i].name}</a></td><td>${data[i].size}</td><td><button onclick="delete_file('${data[i].name}')">Delete</button></td></tr>`;
+                tbody.innerHTML += row;
+            }
+        });
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        fetch("/configs")
+        .then(response => response.json())
+        .then(data => {
+            add_select_elements(parseInt(data.channel));
+            var checkbox = document.getElementById("default_dvr");
+            if(data.default_dvr == "true"){
+                checkbox.checked = true;
+            }
+        });
+
+    function add_select_elements(default_channel){
+        var selectElement = document.querySelector('select');
+        for (var i = 1; i <= 11; i++) {
+            var optionElement = document.createElement('option');
+            optionElement.value = i;
+            
+            
+            if (i == default_channel) {
+                optionElement.selected = 'selected';
+            }
+            
+            optionElement.textContent = i;
+            selectElement.appendChild(optionElement);
+        }
+    }
+
+    });
+
+    
+</script>
+
+</body>
+</html>

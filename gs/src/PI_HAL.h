@@ -3,6 +3,7 @@
 #include "IHAL.h"
 #include <memory>
 #include <functional>
+#include <vector>
 
 class PI_HAL : virtual public IHAL
 {

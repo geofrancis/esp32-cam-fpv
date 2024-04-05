@@ -5,7 +5,15 @@
 		},
 		{
 			"name": "lib",
+			"path": "../components/air/"
+		},
+		{
+			"name": "lib",
 			"path": "../components/common/"
+		},
+		{
+			"name": "lib",
+			"path": "../components/esp32-camera/"
 		}
 	],
 	"settings": {

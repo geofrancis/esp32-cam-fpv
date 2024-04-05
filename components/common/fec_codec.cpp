@@ -4,6 +4,7 @@
 #include "esp_task_wdt.h"
 #include "safe_printf.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "packets.h"
 #include "crc.h"
@@ -124,7 +125,7 @@ bool Fec_Codec::init(const Descriptor& descriptor, bool is_encoder)
 
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-IRAM_ATTR bool Fec_Codec::is_initialized() const
+bool Fec_Codec::is_initialized() const
 {
     return m_fec != nullptr;
 }
@@ -500,7 +501,7 @@ IRAM_ATTR bool Fec_Codec::encode_data(const void* _data, size_t size, bool block
             crt_packet.size = 0;
         }
 
-        size_t s = std::min(m_descriptor.mtu - crt_packet.size, size);
+        size_t s = std::min<size_t>(m_descriptor.mtu - crt_packet.size, size);
         size_t offset = crt_packet.size;
         memcpy(crt_packet.data + sizeof(Packet_Header) + offset, data, s);
         data += s;
@@ -653,7 +654,7 @@ IRAM_ATTR bool Fec_Codec::decode_data(const void* _data, size_t size, bool block
         }
         else //we got the header, store only the data now
         {
-            size_t s = std::min(m_descriptor.mtu - crt_packet.size, size);
+            size_t s = std::min<size_t>(m_descriptor.mtu - crt_packet.size, size);
             size_t offset = crt_packet.size;
             memcpy(crt_packet.data + offset, data, s);
             data += s;
