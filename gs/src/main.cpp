@@ -137,6 +137,8 @@ int s_total_data = 0;
 int s_lost_frame_count = 0;
 WIFI_Rate s_curr_wifi_rate = WIFI_Rate::RATE_B_2M_CCK;
 int s_wifi_queue = 0;
+bool bRestart = false;
+Clock::time_point restart_tp;
 
 static void comms_thread_proc()
 {
@@ -508,7 +510,7 @@ int run(char* argv[])
         {
             {
                 int value = config.wifi_power;
-                ImGui::SliderInt("Power", &value, 2, 20);
+                ImGui::SliderInt("Power", &value, 0, 20);
                 config.wifi_power = value;
             }
             {
@@ -547,7 +549,7 @@ int run(char* argv[])
                 config.camera.denoise = (int8_t)value;
             }
             {
-                ImGui::SliderInt("WIFI Channel", &s_groundstation_config.wifi_channel, 1, 12);
+                ImGui::SliderInt("WIFI Channel", &s_groundstation_config.wifi_channel, 1, 13);
             }
             {
                 //ImGui::Checkbox("LC", &config.camera.lenc);
@@ -588,11 +590,21 @@ int run(char* argv[])
                 abort();
             }
             if (ImGui::Button("Restart")){
-                char tempstr[30];
-                sprintf(tempstr,"ESPVTX_WIFI_CHN=%d",s_groundstation_config.wifi_channel);
-                putenv(tempstr);
-                execv(argv[0],argv);
+                //send channel change command to receiver, then restart
+                restart_tp = Clock::now();
+                bRestart = true;
             }
+
+            if ( bRestart ) {
+                config.wifi_channel = s_groundstation_config.wifi_channel;
+                if (Clock::now() - restart_tp >= std::chrono::milliseconds(2000)) {
+                    bRestart = false;
+                    char tempstr[30];
+                    sprintf(tempstr,"ESPVTX_WIFI_CHN=%d",s_groundstation_config.wifi_channel);
+                    putenv(tempstr);
+                    execv(argv[0],argv);
+                }
+            } 
 
             ImGui::Text("%.3f ms/frame (%.1f FPS) %.1f VFPS", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate, video_fps);
         }
@@ -692,20 +704,21 @@ int main(int argc, const char* argv[])
 
     s_hal.reset(new PI_HAL());
 
-    {
-        char *temp = getenv("ESPVTX_WIFI_CHN");
-        if(temp){
-            s_groundstation_config.wifi_channel = atoi(temp);
-        }else{
-            s_groundstation_config.wifi_channel = 11;
-        }
-    }
-
     Ground2Air_Config_Packet& config=s_ground2air_config_packet;
     //config.wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
     //config.camera.resolution = Resolution::SVGA;
     //config.camera.fps_limit = 30;
     //config.camera.quality = 30;
+
+    {
+        char *temp = getenv("ESPVTX_WIFI_CHN");
+        if(temp){
+            s_groundstation_config.wifi_channel = atoi(temp);
+            config.wifi_channel = s_groundstation_config.wifi_channel;
+        }else{
+            s_groundstation_config.wifi_channel = config.wifi_channel;
+        }
+    }
 
     for(int i=1;i<argc;++i){
         auto temp = std::string(argv[i]);
@@ -736,6 +749,7 @@ int main(int argc, const char* argv[])
         }else if(temp=="-ch"){
             check_argval("ch");
             s_groundstation_config.wifi_channel = std::stoi(next);
+            config.wifi_channel = s_groundstation_config.wifi_channel;
             i++;
         }else if(temp=="-w"){
             check_argval("w");
