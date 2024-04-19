@@ -49,37 +49,49 @@ https://user-images.githubusercontent.com/10252034/116135308-43c08c00-a6d1-11eb-
 `WLAN S: 761616, R: 350, E: 0, D: 0, % : 0 || FPS: 69, D: 449347 || D: 0, E: 0`
 
 ### Raspberry Pi ground station:
-- I use a Raspberry Pi 4 in a RasPad3 enclosure, but any HDMI display should work. Raspberry Pi 3 should work as well.
-- You need to use 2 TL-WN722N adapters connected to USB. Check the EZ-wifibroadcast wiki for more info about the hardware revision of these adapters and alternative adapters. Make sure you get the 2.4GHz ones, of course. NOTE: the adapters are critical, not all work in monitor mode!
-- If you only have one adapter or they are not called `wlan1` & `wlan2`, check the `main.cpp` file and change the names and number there:\
-	`rx_descriptor.interfaces = {"wlan1", "wlan2"};`\
-	`tx_descriptor.interface = "wlan1";`\
-	Eventually this should be command line driven.
-- The UI uses ImGui and is touch driven - but mouse should work as well
-- Dependencies:
-	`sudo apt install libdrm-dev libgbm-dev libgles2-mesa-dev libpcap-dev libturbojpeg0-dev libts-dev libsdl2-dev libfreetype6-dev `
-- In the gs folder, execute `make -j4`
-- Run `sudo -E DISPLAY=:0 ./gs`
+sudo apt update && sudo apt upgrade                
+sudo apt install libdrm-dev libgbm-dev libgles2-mesa-dev libpcap-dev libturbojpeg0-dev libts-dev libsdl2-dev libfreetype6-dev                    
+sudo apt-get install -y aircrack-ng                 
+sudo apt-get install dkms               
+sudo apt install -y raspberrypi-kernel-headers build-essential bc dkms git                       
 
-The GS can run both with X11 and without. However, to run it without GS you need to compile SDL2 yourself to add support for kmsdrm:
-`git clone https://github.com/libsdl-org/SDL.git`\
-`git fetch` \
-`git checkout SDL2` \
-`cd SDL`\
-`mkdir build`\
-`cd build`\
-`../configure --disable-video-rpi --enable-video-kmsdrm --enable-video-x11 --disable-video-opengl`\
-`make -j5`\
-`sudo make install`
+mkdir -p ~/src                      
+cd ~/src                
+git clone https://github.com/morrownr/8812au-20210629.git                   
+cd ~/src/8812au-20210629               
+sudo ./install-driver.sh               
 
-To run without X11 using the just compiled SDL2, do this:\
-`sudo -E LD_LIBRARY_PATH=/usr/local/lib DISPLAY=:0 ./gs`
+config = NO              
+restart = YES                
 
-Some other things that should improve latency:
-- Disable the compositor from raspi-config. This should increase FPS
-- Change from fake kms to real kms in config.txt: dtoverlay=vc4-fkms-v3d to dtoverlay=vc4-kms-v3d
+git clone https://github.com/RomanLut/esp32-cam-fpv.git                      
+cd ./esp32-cam-fpv/gs                   
+git submodule update --init --recursive                  
+make -j4               
 
-VSync is disabled and on a PI4 you should get > 200FPS if everything went ok and you have configured the PI correctly.
+sudo nano /home/pi/Desktop/fpv.sh                 
+
+paste and save                   
+
+
+    #!/bin/bash
+
+    echo "ESP32-FPV STARTUP"
+    cd /home/pi/esp32-cam-fpv
+    cd gs
+    sudo airmon-ng check kill
+    sudo ip link set wlan1 down
+    sudo iw dev wlan1 set type monitor
+    sudo ip link set wlan1 up
+    sudo ./gs -fullscreen 1 -sm 1 -rx wlan1 -tx wlan1
+
+CTRL + O save
+ENTER confirm
+CTRL + X exit
+
+sudo chmod +x /home/pi/Desktop/fpv.sh
+
+
 
 
 
