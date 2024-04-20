@@ -49,30 +49,33 @@ https://user-images.githubusercontent.com/10252034/116135308-43c08c00-a6d1-11eb-
 `WLAN S: 761616, R: 350, E: 0, D: 0, % : 0 || FPS: 69, D: 449347 || D: 0, E: 0`
 
 ### Raspberry Pi ground station:
-sudo apt update && sudo apt upgrade                
-sudo apt install libdrm-dev libgbm-dev libgles2-mesa-dev libpcap-dev libturbojpeg0-dev libts-dev libsdl2-dev libfreetype6-dev                    
-sudo apt-get install -y aircrack-ng                 
-sudo apt-get install dkms               
-sudo apt install -y raspberrypi-kernel-headers build-essential bc dkms git                       
 
-mkdir -p ~/src                      
-cd ~/src                
-git clone https://github.com/morrownr/8812au-20210629.git                   
-cd ~/src/8812au-20210629               
-sudo ./install-driver.sh               
 
-config = NO              
-restart = YES                
+sudo apt update && sudo apt upgrade
+sudo apt install libdrm-dev libgbm-dev libgles2-mesa-dev libpcap-dev libturbojpeg0-dev libts-dev libsdl2-dev libfreetype6-dev
+sudo apt-get install -y aircrack-ng
+sudo apt-get install dkms
+sudo apt install -y raspberrypi-kernel-headers build-essential bc dkms git
 
-git clone https://github.com/RomanLut/esp32-cam-fpv.git                      
-cd ./esp32-cam-fpv/gs                   
-git submodule update --init --recursive                  
-make -j4               
+if using a 32bit OS:
+sudo nano /boot/config.txt
+add " arm_64bit=0" to bottom of file save and reboot
 
-sudo nano /home/pi/Desktop/fpv.sh                 
+mkdir -p ~/src
+cd ~/src
+git clone https://github.com/morrownr/8812au-20210629.git
+cd ~/src/8812au-20210629
+sudo ./install-driver.sh
 
-paste and save                   
+config = NO
+restart = YES
 
+git clone https://github.com/RomanLut/esp32-cam-fpv.git
+cd ./esp32-cam-fpv/gs
+git submodule update --init --recursive
+make -j4
+
+sudo nano /home/pi/fpv.sh
 
     #!/bin/bash
 
@@ -85,11 +88,19 @@ paste and save
     sudo ip link set wlan1 up
     sudo ./gs -fullscreen 1 -sm 1 -rx wlan1 -tx wlan1
 
-CTRL + O save
-ENTER confirm
-CTRL + X exit
+save
 
-sudo chmod +x /home/pi/Desktop/fpv.sh
+sudo chmod +x /home/pi/fpv.sh
+
+mkdir /home/pi/.config/autostart
+nano /home/pi/.config/autostart/fpv.desktop
+
+    [Desktop Entry]
+    Type=Application
+    Name=FPV
+    Exec=/usr/bin/bash /home/pi/fpv.sh
+
+save
 
 
 
