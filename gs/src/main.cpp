@@ -475,7 +475,6 @@ int run(char* argv[])
 
     ImGuiIO& io = ImGui::GetIO();
 
-
     s_decoder.init(*s_hal);
 
     fd_set fds;
@@ -491,12 +490,11 @@ int run(char* argv[])
 
     size_t video_frame_count = 0;
 
-
     Clock::time_point last_stats_tp = Clock::now();
     Clock::time_point last_tp = Clock::now();
 
-    auto f = [&config,&argv]{
-
+    auto f = [&config,&argv]
+    {
         char buf[256];
         sprintf(buf, "RSSI:%d FPS:%1.0f/%d %dKB/S %s %d%% %s/%s###HAL", 
         s_min_rssi, video_fps, s_lost_frame_count, 
@@ -505,6 +503,41 @@ int run(char* argv[])
         s_wifi_queue,
         rateName[(int)s_curr_wifi_rate], rateName[(int)config.wifi_rate]);
 
+        //---------- fullscreen window
+        ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
+        ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::Begin("fullscreen", NULL, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBackground /*| ImGuiWindowFlags_Inputs*/);
+        {
+            if ( config.dvr_record )
+            {
+                //AIR REC
+                ImGui::PushID(0);
+                ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor::HSV(0 / 7.0f, 0.6f, 0.6f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, (ImVec4)ImColor::HSV(0 / 7.0f, 0.7f, 0.7f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, (ImVec4)ImColor::HSV(0 / 7.0f, 0.8f, 0.8f));
+                ImGui::Button("AIR");
+                ImGui::PopStyleColor(3);
+                ImGui::PopID();
+                ImGui::SameLine();
+            }
+
+            //GS REC
+            if ( s_groundstation_config.record )
+            {
+                ImGui::PushID(1);
+                ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor::HSV(0 / 7.0f, 0.6f, 0.6f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, (ImVec4)ImColor::HSV(0 / 7.0f, 0.7f, 0.7f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, (ImVec4)ImColor::HSV(0 / 7.0f, 0.8f, 0.8f));
+                ImGui::Button("GS");
+                ImGui::PopStyleColor(3);
+                ImGui::PopID();
+            }
+        }
+        ImGui::End();
+        ImGui::PopStyleVar(2);
+
+        //------------ debug window
         ImGui::SetNextWindowCollapsed(true, ImGuiCond_Once); 
         ImGui::Begin(buf);
         {
@@ -563,7 +596,7 @@ int run(char* argv[])
                 //ImGui::Checkbox("Raw", &config.camera.raw_gma);
                 //ImGui::SameLine();
                 bool last_record=s_groundstation_config.record;
-                ImGui::Checkbox("Record", &config.dvr_record);
+                ImGui::Checkbox("AIR Record", &config.dvr_record);
                 ImGui::Checkbox("GS Record",&s_groundstation_config.record);
                 if(s_groundstation_config.record != last_record){
                     std::lock_guard<std::mutex> lg(s_groundstation_config.record_mutex);
@@ -615,6 +648,7 @@ int run(char* argv[])
     };
 
     s_hal->add_render_callback(f);
+
     while (true)
     {
         s_decoder.unlock_output();
@@ -623,6 +657,7 @@ int run(char* argv[])
         {
             //std::this_thread::yield();
         }
+
         video_frame_count += count;
         s_hal->set_video_channel(s_decoder.get_video_texture_id());
 
@@ -641,6 +676,7 @@ int run(char* argv[])
         last_tp = now;
         io.DeltaTime = std::chrono::duration_cast<std::chrono::duration<float> >(dt).count();
 
+         if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Space))) break;
     }
 
     return 0;
