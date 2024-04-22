@@ -90,7 +90,7 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
     uint8_t fec_codec_k = 6;
     uint8_t fec_codec_n = 12;
     uint16_t fec_codec_mtu = AIR2GROUND_MTU;
-    uint8_t air_record_btn = 0;
+    uint8_t air_record_btn = 0; //incremented each time button is pressed on gs
 
     struct Camera
     {
@@ -147,13 +147,13 @@ struct Air2Ground_Video_Packet : Air2Ground_Header
     Resolution resolution;
     uint8_t part_index : 7;
     uint8_t last_part : 1;
-    uint8_t wifi_queue: 7;
-    uint8_t air_record_state: 1;
+    uint8_t wifi_queue : 7;
+    uint8_t air_record_state : 1;
     WIFI_Rate curr_wifi_rate;
     uint32_t frame_index = 0;
     uint16_t freeSpaceGB16 : 12;
     uint16_t totalSpaceGB16 : 12;
-    uint16_t quality: 8;
+    uint16_t curr_quality : 8;
     //data follows
 };
 
