@@ -90,7 +90,7 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
     uint8_t fec_codec_k = 6;
     uint8_t fec_codec_n = 12;
     uint16_t fec_codec_mtu = AIR2GROUND_MTU;
-    bool dvr_record = false;
+    uint8_t air_record_btn = 0;
 
     struct Camera
     {
@@ -148,7 +148,7 @@ struct Air2Ground_Video_Packet : Air2Ground_Header
     uint8_t part_index : 7;
     uint8_t last_part : 1;
     uint8_t wifi_queue: 7;
-    uint8_t dvr_record: 1;
+    uint8_t air_record_state: 1;
     WIFI_Rate curr_wifi_rate;
     uint32_t frame_index = 0;
     uint16_t freeSpaceGB16 : 12;

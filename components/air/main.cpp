@@ -80,7 +80,13 @@ static int s_uart_verbose = 1;
 /////////////////////////////////////////////////////////////////////////
 
  sdmmc_card_t* card = nullptr;
-static bool s_dvr_record = true;
+
+#ifdef DVR_SUPPORT
+static bool s_air_record = true;
+#else
+static bool s_air_record = false;
+#endif
+
 static bool s_shouldRestart = false;
 
 
@@ -172,7 +178,7 @@ void update_status_led()
     return;
   }
 */
-  if (s_dvr_record)
+  if (s_air_record)
   {
     bool b = (millis() & 0x7ff) > 0x400;
     set_status_led(b);
@@ -219,7 +225,7 @@ void checkButton()
 
     if ( buttonState )
     {
-        s_dvr_record = !s_dvr_record;
+        s_air_record = !s_air_record;
         LOG("Button pressed!\n");
     }
     else
@@ -448,10 +454,10 @@ static bool init_sd()
     if (res == 0 ) 
     {
         DWORD free_sect = free_clust * fs->csize;
-        DWORD tot_sect = (fs->n_fatent - 2) * fs->csize;
+        DWORD tot_sect = fs->n_fatent * fs->csize;
 
-        SDTotalSpaceGB16 = tot_sect / 2 / 1024 / (1024/16 );
-        SDFreeSpaceGB16 = free_sect / 2 / 1024 / (1024/16 );
+        SDTotalSpaceGB16 = tot_sect / 2 / 1024 / (1024/16);
+        SDFreeSpaceGB16 = free_sect / 2 / 1024 / (1024/16);
 	}
 
     //find the latest file number
@@ -498,7 +504,7 @@ static void sd_write_proc(void*)
 
     while (true)
     {
-        if (!s_dvr_record)
+        if (!s_air_record)
         {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
             continue;
@@ -509,7 +515,7 @@ static void sd_write_proc(void*)
         FILE* f = open_sd_file();
         if (!f)
         {
-            s_dvr_record = false;
+            s_air_record = false;
             vTaskDelay(1000 / portTICK_PERIOD_MS); 
             continue;
         }
@@ -526,7 +532,7 @@ static void sd_write_proc(void*)
 
             while (true) //consume all the buffer
             {
-                if (!s_dvr_record)
+                if (!s_air_record)
                 {
                     LOG("Done recording, closing file\n", s_sd_file_size);
                     done = true;
@@ -585,7 +591,7 @@ static void sd_enqueue_proc(void*)
 {
     while (true)
     {
-        if (!s_dvr_record)
+        if (!s_air_record)
         {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
             continue;
@@ -621,7 +627,7 @@ static void sd_enqueue_proc(void*)
             if (s_sd_write_task)
                 xTaskNotifyGive(s_sd_write_task); //notify task
 
-            if (!s_dvr_record)
+            if (!s_air_record)
                 break;
         }
     }
@@ -769,6 +775,12 @@ static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, boo
         LOG("Target FPS changed from %d to %d\n", (int)dst.camera.fps_limit, (int)src.camera.fps_limit);
     }
 
+    if ( dst.air_record_btn != src.air_record_btn )
+    {
+        dst.air_record_btn = src.air_record_btn;
+        s_air_record = !s_air_record;
+    }
+
 #define APPLY(n1, n2, type) \
     if (forceCameraSettings || (dst.camera.n1 != src.camera.n1)) \
     { \
@@ -872,11 +884,11 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
     packet.size = s_video_frame_data_size + sizeof(Air2Ground_Video_Packet);
     packet.pong = s_ground2air_config_packet.ping;
     packet.wifi_queue = s_max_wlan_outgoing_queue_usage;
-    packet.dvr_record = s_dvr_record ? 1 : 0;
+    packet.air_record_state = s_air_record ? 1 : 0;
     packet.curr_wifi_rate = s_wlan_rate;
     packet.version = PACKET_VERSION;
-    packet.freeSpaceGB16 = SDTotalSpaceGB16;
-    packet.totalSpaceGB16 = SDFreeSpaceGB16;
+    packet.freeSpaceGB16 = SDFreeSpaceGB16;
+    packet.totalSpaceGB16 = SDTotalSpaceGB16;
     packet.quality = s_quality;
     packet.crc = 0;
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_Video_Packet));
@@ -1108,7 +1120,7 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
                 }
 
 #ifdef DVR_SUPPORT
-                if (s_dvr_record)
+                if (s_air_record)
                     add_to_sd_fast_buffer(start_ptr, c);
 #endif
             }
