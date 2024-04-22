@@ -2,6 +2,8 @@
 
 #include "structures.h"
 
+#define PACKET_VERSION 1
+
 #pragma pack(push, 1) // exact fit - no padding
 
 enum class WIFI_Rate : uint8_t
@@ -136,7 +138,7 @@ struct Air2Ground_Header
     Type type = Type::Video; 
     uint32_t size = 0;
     uint8_t pong = 0; //used for latency measurement
-    uint8_t version;
+    uint8_t version; //PACKET_VERSION
     uint8_t crc = 0;
 };
 
@@ -149,8 +151,9 @@ struct Air2Ground_Video_Packet : Air2Ground_Header
     uint8_t dvr_record: 1;
     WIFI_Rate curr_wifi_rate;
     uint32_t frame_index = 0;
-    uint8_t freeSpaceMB;
-    uint8_t totalSpaceMB;
+    uint16_t freeSpaceGB16 : 12;
+    uint16_t totalSpaceGB16 : 12;
+    uint16_t quality: 8;
     //data follows
 };
 
@@ -158,7 +161,7 @@ struct Air2Ground_Data_Packet : Air2Ground_Header
 {
 };
 
-static_assert(sizeof(Air2Ground_Video_Packet) == 18, "");
+static_assert(sizeof(Air2Ground_Video_Packet) == 20, "");
 
 ///////////////////////////////////////////////////////////////////////////////////////
 

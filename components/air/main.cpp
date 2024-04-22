@@ -68,6 +68,9 @@ static uint8_t s_max_wlan_outgoing_queue_usage = 0;
 
 extern WIFI_Rate s_wlan_rate;
 
+static uint16_t SDTotalSpaceGB16 = 0;
+static uint16_t SDFreeSpaceGB16 = 0;
+
 /////////////////////////////////////////////////////////////////////////
 
 static int s_uart_verbose = 1;
@@ -312,6 +315,9 @@ static bool init_sd()
     if (s_sd_initialized)
         return true;
 
+    SDTotalSpaceGB16 = 0;
+    SDFreeSpaceGB16 = 0;
+
 #ifdef BOARD_ESP32CAM
     esp_vfs_fat_sdmmc_mount_config_t mount_config;
 #ifdef CAMERA_MODEL_ESP_VTX
@@ -434,6 +440,19 @@ static bool init_sd()
 
     // Card has been initialized, print its properties
     sdmmc_card_print_info(stdout, card);
+
+    /* Get volume information and free clusters of sdcard */
+    FATFS *fs;
+    DWORD free_clust, free_sect, tot_sect;
+    auto res = f_getfree("/sdcard/", &free_clust, &fs);
+    if (res == 0 ) 
+    {
+        DWORD free_sect = free_clust * fs->csize;
+        DWORD tot_sect = (fs->n_fatent - 2) * fs->csize;
+
+        SDTotalSpaceGB16 = tot_sect / 2 / 1024 / (1024/16 );
+        SDFreeSpaceGB16 = free_sect / 2 / 1024 / (1024/16 );
+	}
 
     //find the latest file number
     char buffer[64];
@@ -853,7 +872,12 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
     packet.size = s_video_frame_data_size + sizeof(Air2Ground_Video_Packet);
     packet.pong = s_ground2air_config_packet.ping;
     packet.wifi_queue = s_max_wlan_outgoing_queue_usage;
+    packet.dvr_record = s_dvr_record ? 1 : 0;
     packet.curr_wifi_rate = s_wlan_rate;
+    packet.version = PACKET_VERSION;
+    packet.freeSpaceGB16 = SDTotalSpaceGB16;
+    packet.totalSpaceGB16 = SDFreeSpaceGB16;
+    packet.quality = s_quality;
     packet.crc = 0;
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_Video_Packet));
     if (!s_fec_encoder.flush_encode_packet(true))
@@ -883,6 +907,7 @@ IRAM_ATTR void send_air2ground_data_packet()
     packet.type = Air2Ground_Header::Type::Telemetry;
     packet.size = ds + sizeof(Air2Ground_Data_Packet);
     packet.pong = s_ground2air_config_packet.ping;
+    packet.version = PACKET_VERSION;
     packet.crc = 0;
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_Data_Packet));
 
