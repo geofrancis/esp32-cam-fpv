@@ -129,6 +129,7 @@ struct{
     FILE * record_file=nullptr;
     std::mutex record_mutex;
     int wifi_channel;
+    bool stats;
 }s_groundstation_config;
 
 float video_fps = 0;
@@ -137,8 +138,12 @@ int s_total_data = 0;
 int s_lost_frame_count = 0;
 WIFI_Rate s_curr_wifi_rate = WIFI_Rate::RATE_B_2M_CCK;
 int s_wifi_queue = 0;
+uint8_t s_curr_quality = 0;
 bool bRestart = false;
 Clock::time_point restart_tp;
+uint16_t s_SDTotalSpaceGB16 = 0;
+uint16_t s_SDFreeSpaceGB16 = 0;
+bool s_air_record = false;
 
 static void comms_thread_proc()
 {
@@ -323,7 +328,11 @@ static void comms_thread_proc()
                 }
 
                 s_curr_wifi_rate = air2ground_video_packet.curr_wifi_rate;
+                s_curr_quality = air2ground_video_packet.curr_quality;
                 s_wifi_queue = air2ground_video_packet.wifi_queue;
+                s_SDTotalSpaceGB16 = air2ground_video_packet.totalSpaceGB16;
+                s_SDFreeSpaceGB16 = air2ground_video_packet.freeSpaceGB16;
+                s_air_record = air2ground_video_packet.air_record_state !=0;
 
                 if (air2ground_video_packet.pong == last_sent_ping)
                 {
@@ -376,11 +385,13 @@ static void comms_thread_proc()
                     {
                         //LOGI("Received frame {}, {}, size {}", video_frame_index, video_next_part_index, video_frame.size());
                         s_decoder.decode_data(video_frame.data(), video_frame.size());
-                        if(s_groundstation_config.record){
+                        if(s_groundstation_config.record)
+                        {
                             std::lock_guard<std::mutex> lg(s_groundstation_config.record_mutex);
                             fwrite(video_frame.data(),video_frame.size(),1,s_groundstation_config.record_file);
                         }
-                        if(s_groundstation_config.socket_fd>0){
+                        if(s_groundstation_config.socket_fd>0)
+                        {
                             send_data_to_udp(s_groundstation_config.socket_fd,video_frame.data(),video_frame.size());
                         }
                         video_next_part_index = 0;
@@ -495,21 +506,13 @@ int run(char* argv[])
 
     auto f = [&config,&argv]
     {
-        char buf[256];
-        sprintf(buf, "RSSI:%d FPS:%1.0f/%d %dKB/S %s %d%% %s/%s###HAL", 
-        s_min_rssi, video_fps, s_lost_frame_count, 
-        s_total_data/1024, 
-        resolutionName[(int)config.camera.resolution], 
-        s_wifi_queue,
-        rateName[(int)s_curr_wifi_rate], rateName[(int)config.wifi_rate]);
-
         //---------- fullscreen window
         ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
         ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::Begin("fullscreen", NULL, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBackground /*| ImGuiWindowFlags_Inputs*/);
         {
-            if ( config.dvr_record )
+            if ( s_air_record )
             {
                 //AIR REC
                 ImGui::PushID(0);
@@ -538,6 +541,15 @@ int run(char* argv[])
         ImGui::PopStyleVar(2);
 
         //------------ debug window
+        char buf[256];
+        sprintf(buf, "RSSI:%d FPS:%1.0f/%d %dKB/S %s %d%% Q:%d %s/%s###HAL", 
+        s_min_rssi, video_fps, s_lost_frame_count, 
+        s_total_data/1024, 
+        resolutionName[(int)config.camera.resolution], 
+        s_wifi_queue,
+        s_curr_quality,
+        rateName[(int)s_curr_wifi_rate], rateName[(int)config.wifi_rate]);
+
         ImGui::SetNextWindowCollapsed(true, ImGuiCond_Once); 
         ImGui::Begin(buf);
         {
@@ -563,7 +575,7 @@ int run(char* argv[])
             }
             {
                 int value = config.camera.quality;
-                ImGui::SliderInt("Quality", &value, 0, 63);
+                ImGui::SliderInt("Quality(0-auto)", &value, 0, 63);
                 config.camera.quality = value;
             }
             {
@@ -595,34 +607,41 @@ int run(char* argv[])
                 //ImGui::SameLine();
                 //ImGui::Checkbox("Raw", &config.camera.raw_gma);
                 //ImGui::SameLine();
-                bool last_record=s_groundstation_config.record;
-                ImGui::Checkbox("AIR Record", &config.dvr_record);
-                ImGui::Checkbox("GS Record",&s_groundstation_config.record);
-                if(s_groundstation_config.record != last_record){
+
+                ImGui::Checkbox("Stats", &s_groundstation_config.stats);
+
+                if (ImGui::Button("Air Record"))
+                {
+                    config.air_record_btn++;
+                }
+
+                ImGui::SameLine();
+                if (ImGui::Button("GS Record"))
+                {
+                    s_groundstation_config.record = !s_groundstation_config.record;
+
                     std::lock_guard<std::mutex> lg(s_groundstation_config.record_mutex);
-                    if(s_groundstation_config.record){
+                    if(s_groundstation_config.record)
+                    {
                         auto time=std::time({});
                         char filename[]="yyyy-mm-dd-hh:mm:ss.mjpeg";
                         std::strftime(filename, sizeof(filename), "%F-%T.mjpeg", std::localtime(&time));
                         s_groundstation_config.record_file=fopen(filename,"wb+");
 
                         LOGI("start record:{}",std::string(filename));
-                    }else{
+                    }
+                    else
+                    {
                         fflush(s_groundstation_config.record_file);
                         fclose(s_groundstation_config.record_file);
                         s_groundstation_config.record_file=nullptr;
                     }
                 }
             }
-            if (ImGui::Button("Exit")){
-                if(s_groundstation_config.record){
-                    std::lock_guard<std::mutex> lg(s_groundstation_config.record_mutex);
-                    fflush(s_groundstation_config.record_file);
-                    fclose(s_groundstation_config.record_file); 
-                }
-                abort();
-            }
-            if (ImGui::Button("Restart")){
+
+            ImGui::SameLine();
+            if (ImGui::Button("Restart"))
+            {
                 //send channel change command to receiver, then restart
                 restart_tp = Clock::now();
                 bRestart = true;
@@ -639,7 +658,19 @@ int run(char* argv[])
                 }
             } 
 
+            ImGui::SameLine();
+            if (ImGui::Button("Exit"))
+            {
+                if(s_groundstation_config.record){
+                    std::lock_guard<std::mutex> lg(s_groundstation_config.record_mutex);
+                    fflush(s_groundstation_config.record_file);
+                    fclose(s_groundstation_config.record_file); 
+                }
+                abort();
+            }
+            
             ImGui::Text("%.3f ms/frame (%.1f FPS) %.1f VFPS", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate, video_fps);
+            ImGui::Text("AIR SD Card: %.2fGB/%.2fGB", s_SDFreeSpaceGB16 / 16.0f, s_SDTotalSpaceGB16 / 16.0f);
         }
         ImGui::End();
 
@@ -746,6 +777,7 @@ int main(int argc, const char* argv[])
     //config.camera.fps_limit = 30;
     //config.camera.quality = 30;
 
+    s_groundstation_config.stats = false;
     {
         char *temp = getenv("ESPVTX_WIFI_CHN");
         if(temp){
