@@ -23,6 +23,8 @@
 #include "imgui_impl_opengl3.h"
 #include "main.h"
 
+#include "stats.h"
+
 #include <unistd.h>
 #include <termios.h>
 #include <sys/ioctl.h>
@@ -145,6 +147,10 @@ uint16_t s_SDTotalSpaceGB16 = 0;
 uint16_t s_SDFreeSpaceGB16 = 0;
 bool s_air_record = false;
 
+Stats s_frame_stats;
+Stats s_frameParts_stats;
+
+
 static void comms_thread_proc()
 {
     Clock::time_point last_stats_tp = Clock::now();
@@ -165,6 +171,7 @@ static void comms_thread_proc()
     std::vector<uint8_t> video_frame;
     uint32_t video_frame_index = 0;
     uint8_t video_next_part_index = 0;
+    bool video_restoredByFEC = false;
 
     struct RX_Data
     {
@@ -285,13 +292,16 @@ static void comms_thread_proc()
 
         //pump the comms to avoid packages accumulating
         s_comms.process();
-        s_comms.receive(rx_data.data.data(), rx_data.size);
+
+        bool restoredByFEC;
+        s_comms.receive(rx_data.data.data(), rx_data.size, restoredByFEC);
 #else
         //receive new packets
         do
         {
             s_comms.process();
-            if (!s_comms.receive(rx_data.data.data(), rx_data.size))
+            bool restoredByFEC;
+            if (!s_comms.receive(rx_data.data.data(), rx_data.size, restoredByFEC))
             {
                 std::this_thread::yield();
                 break;
@@ -361,27 +371,35 @@ static void comms_thread_proc()
 
                     if ( video_next_part_index != 0 )
                     {
-                        //not all parts are received, frame is lost
+                        //video_frame_index - not all parts are received, frame is lost
                         s_lost_frame_count++;
+                        s_frame_stats.add(0);
+                        s_frameParts_stats.add(video_next_part_index);
                     }
 
+                    //frames [video_frame_index + 1 ... untill air2ground_video_packet.frame_index) are lost completely
                     int df = air2ground_video_packet.frame_index - video_frame_index;
                     if ( df > 1)
                     {
-                        s_lost_frame_count += df-1;
+                        df--;
+                        s_lost_frame_count += df;
+                        s_frame_stats.addMultiple( 0, df );
+                        s_frameParts_stats.addMultiple( 0, df );
                     }
 
                     video_frame_index = air2ground_video_packet.frame_index;
                     video_next_part_index = 0;
+                    video_restoredByFEC = false;
                 }
                 if (air2ground_video_packet.frame_index == video_frame_index && air2ground_video_packet.part_index == video_next_part_index)
                 {
+                    video_restoredByFEC |= restoredByFEC;
                     video_next_part_index++;
                     size_t offset = video_frame.size();
                     video_frame.resize(offset + payload_size);
                     memcpy(video_frame.data() + offset, rx_data.data.data() + sizeof(Air2Ground_Video_Packet), payload_size);
 
-                    if (video_next_part_index > 0 && air2ground_video_packet.last_part != 0)
+                    if (air2ground_video_packet.last_part != 0)
                     {
                         //LOGI("Received frame {}, {}, size {}", video_frame_index, video_next_part_index, video_frame.size());
                         s_decoder.decode_data(video_frame.data(), video_frame.size());
@@ -396,6 +414,11 @@ static void comms_thread_proc()
                         }
                         video_next_part_index = 0;
                         video_frame.clear();
+
+                        s_frame_stats.add(video_restoredByFEC ? 1 : 3);
+                        s_frameParts_stats.add(air2ground_video_packet.part_index);
+
+                        video_restoredByFEC = false;
                     }
                 }
 
@@ -522,12 +545,12 @@ int run(char* argv[])
                 ImGui::Button("AIR");
                 ImGui::PopStyleColor(3);
                 ImGui::PopID();
-                ImGui::SameLine();
             }
 
             //GS REC
             if ( s_groundstation_config.record )
             {
+                ImGui::SameLine();
                 ImGui::PushID(1);
                 ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor::HSV(0 / 7.0f, 0.6f, 0.6f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonHovered, (ImVec4)ImColor::HSV(0 / 7.0f, 0.7f, 0.7f));
@@ -536,13 +559,19 @@ int run(char* argv[])
                 ImGui::PopStyleColor(3);
                 ImGui::PopID();
             }
+
+            if ( s_groundstation_config.stats )
+            {
+                ImGui::PlotHistogram("Frames", Stats::getter, &s_frame_stats, s_frame_stats.count(), 0, NULL, 0, 3.0f, ImVec2(0, 24));            
+                ImGui::PlotHistogram("Parts", Stats::getter, &s_frameParts_stats, s_frameParts_stats.count(), 0, NULL, 0, s_frameParts_stats.average()*2 + 1.0f, ImVec2(0, 60));
+            }
         }
         ImGui::End();
         ImGui::PopStyleVar(2);
 
         //------------ debug window
         char buf[256];
-        sprintf(buf, "RSSI:%d FPS:%1.0f/%d %dKB/S %s %d%% Q:%d %s/%s###HAL", 
+        sprintf(buf, "RSSI:%d FPS:%1.0f/%d %dKB/S %s %d%% AQ:%d %s/%s###HAL", 
         s_min_rssi, video_fps, s_lost_frame_count, 
         s_total_data/1024, 
         resolutionName[(int)config.camera.resolution], 
@@ -555,12 +584,12 @@ int run(char* argv[])
         {
             {
                 int value = config.wifi_power;
-                ImGui::SliderInt("Power", &value, 0, 20);
+                ImGui::SliderInt("WIFI Power", &value, 0, 20); 
                 config.wifi_power = value;
             }
             {
                 static int value = (int)config.wifi_rate;
-                ImGui::SliderInt("Rate", &value, (int)WIFI_Rate::RATE_B_2M_CCK, (int)WIFI_Rate::RATE_N_72M_MCS7_S);
+                ImGui::SliderInt("WIFI Rate", &value, (int)WIFI_Rate::RATE_B_2M_CCK, (int)WIFI_Rate::RATE_N_72M_MCS7_S);
                 config.wifi_rate = (WIFI_Rate)value;
             }
             {
@@ -570,7 +599,7 @@ int run(char* argv[])
             }
             {
                 int value = (int)config.camera.fps_limit;
-                ImGui::SliderInt("FPS", &value, 0, 100);
+                ImGui::SliderInt("FPS Limit", &value, 0, 100);
                 config.camera.fps_limit = (uint8_t)value;
             }
             {
@@ -580,7 +609,7 @@ int run(char* argv[])
             }
             {
                 int value = config.camera.gainceiling;
-                ImGui::SliderInt("Gain", &value, 0, 6);
+                ImGui::SliderInt("GainCeiling", &value, 0, 6);
                 config.camera.gainceiling = (uint8_t)value;
             }
             {
