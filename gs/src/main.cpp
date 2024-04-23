@@ -14,7 +14,7 @@
 #include "IHAL.h"
 #include "PI_HAL.h"
 #include "imgui.h"
-#include "HUD.h"
+#include "osd.h"
 #include "Log.h"
 #include "Video_Decoder.h" 
 #include "crc.h"
@@ -149,6 +149,9 @@ bool s_air_record = false;
 
 Stats s_frame_stats;
 Stats s_frameParts_stats;
+
+OSD g_osd;
+
 
 
 static void comms_thread_proc()
@@ -505,8 +508,6 @@ void ImageRotated(ImTextureID tex_id, ImVec2 center, ImVec2 size, float angle, f
 
 int run(char* argv[])
 {
-    HUD hud(*s_hal);
-
     ImGuiIO& io = ImGui::GetIO();
 
     s_decoder.init(*s_hal);
@@ -523,6 +524,8 @@ int run(char* argv[])
     Ground2Air_Config_Packet config=s_ground2air_config_packet;
 
     size_t video_frame_count = 0;
+
+    g_osd.init();
 
     Clock::time_point last_stats_tp = Clock::now();
     Clock::time_point last_tp = Clock::now();
@@ -565,6 +568,8 @@ int run(char* argv[])
                 ImGui::PlotHistogram("Frames", Stats::getter, &s_frame_stats, s_frame_stats.count(), 0, NULL, 0, 3.0f, ImVec2(0, 24));            
                 ImGui::PlotHistogram("Parts", Stats::getter, &s_frameParts_stats, s_frameParts_stats.count(), 0, NULL, 0, s_frameParts_stats.average()*2 + 1.0f, ImVec2(0, 60));
             }
+
+            g_osd.draw();
         }
         ImGui::End();
         ImGui::PopStyleVar(2);
