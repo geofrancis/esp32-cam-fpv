@@ -8,7 +8,8 @@ class FontWalksnail
 {
 private:
 
-  int fontTextureId = 0;
+  uint32_t fontTextureId = 0;
+
 
   unsigned int charWidth;
   unsigned int charHeight;
@@ -22,7 +23,9 @@ public:
 	FontWalksnail(const char* fileName);
 	~FontWalksnail();
 
-  void drawChar(uint16_t code, float x1, float y1, float width, float height);
-  void destroy();
+  void drawChar(uint16_t code, int x1, int y1, int width, int height);
 
+  void drawTest();
+
+  void destroy();
 };

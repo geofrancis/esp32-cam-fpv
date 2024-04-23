@@ -1,8 +1,18 @@
+#include "main.h"
+
 #include "lodepng.h"
 
 #include "fontwalksnail.h"
 #include "Log.h"
 #include "util.h"
+
+#include "imgui.h"
+
+extern "C"
+{
+#include <GLES3/gl3.h>
+#include <GLES3/gl3ext.h>
+}
 
 #define OSD_CHAR_WIDTH_24 24
 #define OSD_CHAR_HEIGHT_24 36
@@ -86,20 +96,19 @@ FontWalksnail::FontWalksnail(const char* fileName)
   lodepng_encode_file(fname, buffer, this->fontTextureWidth, this->fontTextureHeight, LCT_RGBA, 8);
 */ 
 
-/*
-  XPLMGenerateTextureNumbers(&this->fontTextureId, 1);
-  XPLMBindTexture2d(this->fontTextureId, 0);
-  glTexImage2D(
-    GL_TEXTURE_2D,
-    0,                   // mipmap level
-    GL_RGBA,             // internal format for the GL to use.  (We could ask for a floating point tex or 16-bit tex if we were crazy!)
-    this->fontTextureWidth,
-    this->fontTextureHeight,
-    0,                   // border size
-    GL_RGBA,             // format of color we are giving to GL
-    GL_UNSIGNED_BYTE,    // encoding of our data
-    buffer);
-*/
+  GLCHK(glGenTextures(1, &this->fontTextureId));
+  GLCHK(glBindTexture(GL_TEXTURE_2D, this->fontTextureId));
+  GLCHK(glPixelStorei(GL_UNPACK_ALIGNMENT, 1));
+  GLCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
+  GLCHK(glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
+  GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+  GLCHK(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+  LOGI("Texture: {}", this->fontTextureId);
+
+  GLCHK(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, this->fontTextureWidth, this->fontTextureHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer));
+
+  delete[] buffer;
+
   free(image);
 }
 
@@ -112,12 +121,9 @@ FontWalksnail::~FontWalksnail()
 
 //======================================================
 //======================================================
-void FontWalksnail::drawChar(uint16_t code, float x1, float y1, float width, float height)
+void FontWalksnail::drawChar(uint16_t code, int x1, int y1, int width, int height)
 {
   if (this->fontTextureId == 0) return;
-
-/*
-  int code9 = code % 0xff;
 
   int px = (code % CHARS_PER_TEXTURE_ROW) * this->charWidth;
   int py = (code / CHARS_PER_TEXTURE_ROW) * this->charHeight;
@@ -134,13 +140,20 @@ void FontWalksnail::drawChar(uint16_t code, float x1, float y1, float width, flo
   v2 /= this->fontTextureHeight;
 
   float x2 = x1 + width;
-  float y2 = y1 - height;
+  float y2 = y1 + height;
 
-  glTexCoord2f(u1, v1);        glVertex2f(x1, y1);
-  glTexCoord2f(u2, v1);        glVertex2f(x2, y1);
-  glTexCoord2f(u2, v2);        glVertex2f(x2, y2);
-  glTexCoord2f(u1, v2);        glVertex2f(x1, y2);
- */
+    ImVec2 pos[4] =
+        {
+            ImVec2(x1,y1),ImVec2(x2,y1), ImVec2(x2,y2),ImVec2(x1,y2)
+        };
+
+    ImVec2 uvs[4] =
+        {
+            ImVec2(u1,v1),ImVec2(u2,v1), ImVec2(u2,v2),ImVec2(u1,v2)
+        };
+
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+    draw_list->AddImageQuad((ImTextureID)this->fontTextureId, pos[0], pos[1], pos[2], pos[3], uvs[0], uvs[1], uvs[2], uvs[3], IM_COL32_WHITE);
 }
 
 //======================================================
@@ -150,3 +163,34 @@ void FontWalksnail::calculateTextureHeight(unsigned int imageWidth, unsigned int
   this->fontTextureWidth = smallestPowerOfTwo( imageWidth, 8 );
   this->fontTextureHeight = smallestPowerOfTwo( imageHeight, 8 );
 }
+
+//======================================================
+//======================================================
+void FontWalksnail::destroy()
+{
+    if(this->fontTextureId != 0)
+    {
+        glDeleteTextures(1,&this->fontTextureId);
+    }
+}
+
+
+//======================================================
+//======================================================
+void FontWalksnail::drawTest()
+{
+    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+
+    ImVec2 pos[4] =
+        {
+            ImVec2(0,0),ImVec2(500,0), ImVec2(500,500),ImVec2(0,500)
+        };
+
+    ImVec2 uvs[4] =
+        {
+            ImVec2(0,0),ImVec2(1,0), ImVec2(1,1),ImVec2(0,1)
+        };
+
+    draw_list->AddImageQuad((ImTextureID)this->fontTextureId, pos[0], pos[1], pos[2], pos[3], uvs[0], uvs[1], uvs[2], uvs[3], IM_COL32_WHITE);
+}
+
