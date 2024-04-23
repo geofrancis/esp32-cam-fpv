@@ -132,7 +132,8 @@ struct Air2Ground_Header
     enum class Type : uint8_t
     {
         Video,
-        Telemetry
+        Telemetry,
+        OSD
     };
 
     Type type = Type::Video; 
@@ -157,11 +158,21 @@ struct Air2Ground_Video_Packet : Air2Ground_Header
     //data follows
 };
 
+static_assert(sizeof(Air2Ground_Video_Packet) == 20, "");
+
 struct Air2Ground_Data_Packet : Air2Ground_Header
 {
 };
 
-static_assert(sizeof(Air2Ground_Video_Packet) == 20, "");
+
+#define OSD_COLS 53
+#define OSD_ROWS 20
+
+struct Air2Ground_OSD_Packet : Air2Ground_Header
+{
+    uint16_t screen[OSD_ROWS][OSD_COLS];
+};
+
 
 ///////////////////////////////////////////////////////////////////////////////////////
 

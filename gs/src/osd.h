@@ -1,9 +1,7 @@
 #pragma once
 
 #include "fontwalksnail.h"
-
-#define OSD_COLS 53
-#define OSD_ROWS 20
+#include "packets.h"
 
 //======================================================
 //======================================================
@@ -17,5 +15,6 @@ public:
     OSD();
     void init();
     void draw();
+    void update(uint16_t* pScreen);
 };
 

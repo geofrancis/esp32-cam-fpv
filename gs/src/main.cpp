@@ -436,7 +436,7 @@ static void comms_thread_proc()
                 }
                 if (packet_size < (sizeof(Air2Ground_Data_Packet) + 1))
                 {
-                    LOGE("Telemetry frame: data too small: {} > {}", packet_size, sizeof(Air2Ground_Data_Packet) + 1);
+                    LOGE("Telemetry frame: data too small: {} < {}", packet_size, sizeof(Air2Ground_Data_Packet) + 1);
                     break;
                 }
 
@@ -458,6 +458,34 @@ static void comms_thread_proc()
                 write(fdUART, ((uint8_t*)&air2ground_data_packet) + sizeof(Air2Ground_Data_Packet), payload_size);
                 out_tlm_size += payload_size;
 #endif
+            }
+            else if (air2ground_header.type == Air2Ground_Header::Type::OSD)
+            {
+                if (packet_size > rx_data.size)
+                {
+                    LOGE("OSD frame: data too big: {} > {}", packet_size, rx_data.size);
+                    break;
+                }
+                if (packet_size < (sizeof(Air2Ground_OSD_Packet)))
+                {
+                    LOGE("OSD frame: data too small: {} > {}", packet_size, sizeof(Air2Ground_OSD_Packet));
+                    break;
+                }
+
+                size_t payload_size = packet_size - sizeof(Air2Ground_OSD_Packet);
+                Air2Ground_OSD_Packet& air2ground_osd_packet = *(Air2Ground_OSD_Packet*)rx_data.data.data();
+                uint8_t crc = air2ground_osd_packet.crc;
+                air2ground_osd_packet.crc = 0;
+                uint8_t computed_crc = crc8(0, rx_data.data.data(), sizeof(Air2Ground_OSD_Packet));
+                if (crc != computed_crc)
+                {
+                    LOGE("OSD frame: crc mismatch {}: {} != {}", payload_size, crc, computed_crc);
+                    break;
+                }
+
+                total_data += rx_data.size;
+
+                g_osd.update( (uint16_t*)&(air2ground_osd_packet.screen[0][0] ) );
             }
             else
             {

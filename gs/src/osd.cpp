@@ -54,3 +54,11 @@ void OSD::draw()
         y += iys;
     }
 }
+
+//======================================================
+//======================================================
+void OSD::update(uint16_t* pScreen)
+{
+    memcpy( (void*)&(this->screen[0][0]), pScreen, OSD_ROWS*OSD_COLS*2);
+}
+
