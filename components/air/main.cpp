@@ -43,6 +43,8 @@
 #include "wifi.h"
 #include "nvs_args.h"
 
+#include "osd.h"
+
 uint16_t g_wifi_channel;
 static int s_stats_last_tp = -10000;
 
@@ -449,15 +451,15 @@ static bool init_sd()
 
     /* Get volume information and free clusters of sdcard */
     FATFS *fs;
-    DWORD free_clust, free_sect, tot_sect;
+    DWORD free_clust ;
     auto res = f_getfree("/sdcard/", &free_clust, &fs);
     if (res == 0 ) 
     {
         DWORD free_sect = free_clust * fs->csize;
         DWORD tot_sect = fs->n_fatent * fs->csize;
 
-        SDTotalSpaceGB16 = tot_sect / 2 / 1024 / (1024/16);
         SDFreeSpaceGB16 = free_sect / 2 / 1024 / (1024/16);
+        SDTotalSpaceGB16 = tot_sect / 2 / 1024 / (1024/16);
 	}
 
     //find the latest file number
@@ -851,11 +853,11 @@ static void handle_ground2air_data_packet(Ground2Air_Data_Packet& src)
     s_stats.in_telemetry_data += s;        
 
     size_t freeSize = 0;
-    ESP_ERROR_CHECK( uart_get_tx_buffer_free_size(UART_NUM_2, &freeSize) );
+    ESP_ERROR_CHECK( uart_get_tx_buffer_free_size(UART_MAVLINK, &freeSize) );
 
     if ( freeSize >= s )
     {
-        uart_write_bytes(UART_NUM_2, ((uint8_t*)&src) + sizeof(Ground2Air_Header), s);
+        uart_write_bytes(UART_MAVLINK, ((uint8_t*)&src) + sizeof(Ground2Air_Header), s);
         //uart_write_bytes(UART_NUM_0, ((uint8_t*)&src) + sizeof(Ground2Air_Header), s);
     }
 
@@ -935,8 +937,37 @@ IRAM_ATTR void send_air2ground_data_packet()
         LOG("Fec codec busy\n");
         s_stats.wlan_error_count++;
     }
-
 }
+
+//=============================================================================================
+//=============================================================================================
+IRAM_ATTR void send_air2ground_osd_packet()
+{
+    uint8_t* packet_data = s_fec_encoder.get_encode_packet_data(true);
+
+    if(!packet_data){
+        LOG("no data buf!\n");
+        return ;
+    }
+
+
+    Air2Ground_OSD_Packet& packet = *(Air2Ground_OSD_Packet*)packet_data;
+    packet.type = Air2Ground_Header::Type::OSD;
+    packet.size = sizeof(Air2Ground_OSD_Packet);
+    packet.pong = s_ground2air_config_packet.ping;
+    packet.version = PACKET_VERSION;
+    packet.crc = 0;
+    memcpy( &packet.buffer, g_osd.getBuffer(), OSD_ROWS*OSD_COLS + OSD_ROWS*OSD_COLS_H );
+    g_osd.getBuffer();
+    packet.crc = crc8(0, &packet, sizeof(Air2Ground_OSD_Packet));
+
+    if (!s_fec_encoder.flush_encode_packet(true))
+    {
+        LOG("Fec codec busy\n");
+        s_stats.wlan_error_count++;
+    }
+}
+
 
 constexpr size_t MAX_VIDEO_DATA_PAYLOAD_SIZE = AIR2GROUND_MTU - sizeof(Air2Ground_Video_Packet);
 
@@ -1175,6 +1206,8 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
             recalculateFrameSizeQualityK(s_video_full_frame_size);
             applyAdaptiveQuality();
             s_video_full_frame_size = 0;
+
+            send_air2ground_osd_packet();
         }
     }
 
@@ -1332,7 +1365,7 @@ extern "C" void app_main()
 
 #endif
 
-#ifdef BOARD_ESP32CAM
+#ifdef INIT_UART_0
     //init debug uart
     uart_config_t uart_config0 = {
         .baud_rate = 115200,
@@ -1399,7 +1432,7 @@ extern "C" void app_main()
 #endif
 
 //initialize UART2 after SD
-#ifdef UART_MAVLINK
+#ifdef INIT_UART_2
 
     uart_config_t uart_config2 = {
         .baud_rate = 115200,
@@ -1417,7 +1450,7 @@ extern "C" void app_main()
 
 #endif
 
-#ifdef UART_MSP_OSD
+#ifdef INIT_UART_1
 
     uart_config_t uart_config1 = {
         .baud_rate = 115200,
@@ -1479,7 +1512,7 @@ extern "C" void app_main()
             while ( true )
             {
                 size_t rs = 0;
-                ESP_ERROR_CHECK( uart_get_buffered_data_len(UART_NUM_2, &rs) );
+                ESP_ERROR_CHECK( uart_get_buffered_data_len(UART_MAVLINK, &rs) );
 
                 //LOG("%d\n", rs);
 

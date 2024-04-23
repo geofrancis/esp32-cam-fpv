@@ -166,11 +166,18 @@ struct Air2Ground_Data_Packet : Air2Ground_Header
 
 
 #define OSD_COLS 53
+#define OSD_COLS_H 7 //56 bits
 #define OSD_ROWS 20
+
+struct OSDBuffer
+{
+    uint16_t screenLow[OSD_ROWS][OSD_COLS];
+    uint16_t screenHigh[OSD_ROWS][OSD_COLS_H];
+};
 
 struct Air2Ground_OSD_Packet : Air2Ground_Header
 {
-    uint16_t screen[OSD_ROWS][OSD_COLS];
+    OSDBuffer buffer;
 };
 
 
