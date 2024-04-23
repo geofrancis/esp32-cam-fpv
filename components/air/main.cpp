@@ -777,8 +777,11 @@ static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, boo
 
     if ( dst.air_record_btn != src.air_record_btn )
     {
+        if ( ((uint8_t)(dst.air_record_btn + 1)) == src.air_record_btn )
+        {
+            s_air_record = !s_air_record;
+        }
         dst.air_record_btn = src.air_record_btn;
-        s_air_record = !s_air_record;
     }
 
 #define APPLY(n1, n2, type) \
@@ -889,7 +892,7 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
     packet.version = PACKET_VERSION;
     packet.freeSpaceGB16 = SDFreeSpaceGB16;
     packet.totalSpaceGB16 = SDTotalSpaceGB16;
-    packet.quality = s_quality;
+    packet.curr_quality = s_quality;
     packet.crc = 0;
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_Video_Packet));
     if (!s_fec_encoder.flush_encode_packet(true))
