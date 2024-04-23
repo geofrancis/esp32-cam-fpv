@@ -155,6 +155,7 @@ struct Comms::RX
     struct Packet
     {
         bool is_processed = false;
+        bool restoredByFEC;
         uint32_t index = 0;
         std::vector<uint8_t> data;
     };
@@ -1123,6 +1124,7 @@ void Comms::process_rx_packets()
                     m_data_stats_data_accumulated += d->data.size();
                     {
                         std::lock_guard<std::mutex> lg2(rx.ready_packet_queue_mutex);   
+                        d->restoredByFEC = false;
                         rx.ready_packet_queue.push_back(d);
                     }
                     rx.last_packet_tp = Clock::now();
@@ -1201,6 +1203,7 @@ void Comms::process_rx_packets()
                     m_data_stats_data_accumulated += d->data.size();
                     {
                         std::lock_guard<std::mutex> lg2(rx.ready_packet_queue_mutex);   
+                        d->restoredByFEC = true;
                         rx.ready_packet_queue.push_back(d);
                     }
                     rx.last_packet_tp = Clock::now();
@@ -1248,7 +1251,7 @@ void Comms::process_rx_packets()
     }
 }
 
-bool Comms::receive(void* data, size_t& size)
+bool Comms::receive(void* data, size_t& size, bool& restoredByFEC)
 {
     RX& rx = m_impl->rx;
     
@@ -1261,6 +1264,7 @@ bool Comms::receive(void* data, size_t& size)
     size = d->data.size();
     if (size > 0)
         memcpy(data, d->data.data(), d->data.size());
+    restoredByFEC = d->restoredByFEC;
 
     rx.ready_packet_queue.pop_front();
     return true;
