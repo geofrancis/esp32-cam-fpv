@@ -472,20 +472,19 @@ static void comms_thread_proc()
                     break;
                 }
 
-                size_t payload_size = packet_size - sizeof(Air2Ground_OSD_Packet);
                 Air2Ground_OSD_Packet& air2ground_osd_packet = *(Air2Ground_OSD_Packet*)rx_data.data.data();
                 uint8_t crc = air2ground_osd_packet.crc;
                 air2ground_osd_packet.crc = 0;
                 uint8_t computed_crc = crc8(0, rx_data.data.data(), sizeof(Air2Ground_OSD_Packet));
                 if (crc != computed_crc)
                 {
-                    LOGE("OSD frame: crc mismatch {}: {} != {}", payload_size, crc, computed_crc);
+                    LOGE("OSD frame: crc mismatch: {} != {}", crc, computed_crc);
                     break;
                 }
 
                 total_data += rx_data.size;
 
-                g_osd.update( (uint16_t*)&(air2ground_osd_packet.screen[0][0] ) );
+                g_osd.update( &air2ground_osd_packet.buffer );
             }
             else
             {

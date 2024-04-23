@@ -6,14 +6,7 @@
 //======================================================
 OSD::OSD()
 {
-    //int c = 1;
-    for ( int row = 0; row < OSD_ROWS; row++ )
-    {
-        for ( int col = 0; col < OSD_COLS; col++ )
-        {
-            this->screen[row][col] = 0;//c++ % 512;
-        }
-    }
+    memset( &this->buffer, 0, OSD_BUFFER_SIZE );
 }
 
 //======================================================
@@ -44,7 +37,7 @@ void OSD::draw()
         int x = mx;
         for ( int col = 0; col < OSD_COLS; col++ )
         {
-            uint16_t c = this->screen[row][col];
+            uint16_t c = this->buffer.screenLow[row][col];
             if ( c != 0 )
             {
                 this->font->drawChar(c, x, y, ixs, iys);
@@ -57,8 +50,9 @@ void OSD::draw()
 
 //======================================================
 //======================================================
-void OSD::update(uint16_t* pScreen)
+void OSD::update(void* pScreen)
 {
-    memcpy( (void*)&(this->screen[0][0]), pScreen, OSD_ROWS*OSD_COLS*2);
+    memcpy(&this->buffer, pScreen, OSD_BUFFER_SIZE);
+    this->buffer.screenLow[10][10]++;
 }
 

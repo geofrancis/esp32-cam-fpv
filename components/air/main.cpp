@@ -957,7 +957,7 @@ IRAM_ATTR void send_air2ground_osd_packet()
     packet.pong = s_ground2air_config_packet.ping;
     packet.version = PACKET_VERSION;
     packet.crc = 0;
-    memcpy( &packet.buffer, g_osd.getBuffer(), OSD_ROWS*OSD_COLS + OSD_ROWS*OSD_COLS_H );
+    memcpy( &packet.buffer, g_osd.getBuffer(), OSD_BUFFER_SIZE );
     g_osd.getBuffer();
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_OSD_Packet));
 

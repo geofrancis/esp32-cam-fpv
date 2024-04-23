@@ -7,7 +7,7 @@ OSD g_osd;
 //==============================================================
 OSD::OSD()
 {
-    memset( &this->buffer, 0, OSD_ROWS*OSD_COLS + OSD_ROWS*OSD_COLS_H );
+    memset( &this->buffer, 0, OSD_BUFFER_SIZE );
     this->changed = false;
 }
 

@@ -169,10 +169,12 @@ struct Air2Ground_Data_Packet : Air2Ground_Header
 #define OSD_COLS_H 7 //56 bits
 #define OSD_ROWS 20
 
+#define OSD_BUFFER_SIZE (OSD_ROWS*OSD_COLS + OSD_ROWS*OSD_COLS_H)
+
 struct OSDBuffer
 {
-    uint16_t screenLow[OSD_ROWS][OSD_COLS];
-    uint16_t screenHigh[OSD_ROWS][OSD_COLS_H];
+    uint8_t screenLow[OSD_ROWS][OSD_COLS];
+    uint8_t screenHigh[OSD_ROWS][OSD_COLS_H];
 };
 
 struct Air2Ground_OSD_Packet : Air2Ground_Header
