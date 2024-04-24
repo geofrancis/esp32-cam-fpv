@@ -56,11 +56,9 @@ void MSP::dispatchMessage(uint8_t expected_checksum)
 void MSP::decode()
 {
   static unsigned char data[1024];
-  size_t len = 0;
-  ESP_ERROR_CHECK( uart_get_buffered_data_len(UART_MSP_OSD, &len) );
-  if (len == 0) return;
-
-  ESP_ERROR_CHECK( uart_read_bytes(UART_MSP_OSD, data,1024, 0));
+  int len = uart_read_bytes(UART_MSP_OSD, data,1024, 0);
+  ESP_ERROR_CHECK( len );
+  if (len <= 0) return;
 
   for (int i = 0; i < len; i++)
   {

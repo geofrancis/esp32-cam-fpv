@@ -49,7 +49,7 @@
 //UART1 and UART2 can be used for Mavlink and Displayport OSD
 
 //define to use mavlink telemetry on UART2 
-#define UART_MAVLINK UART_NUM_2
+//#define UART_MAVLINK UART_NUM_2
 
 //define to use DisplayPort OSD on UART1
 #define UART_MSP_OSD UART_NUM_1
@@ -62,12 +62,12 @@
 #define REC_BUTTON_PIN  0
 
 #define INIT_UART_1
-#define TXD1_PIN    2 
-#define RXD1_PIN    4 
+#define TXD1_PIN    2 //D1
+#define RXD1_PIN    4 //D3
 
 #define INIT_UART_2
-#define TXD2_PIN    43 
-#define RXD2_PIN    44 
+#define TXD2_PIN    43 //D6
+#define RXD2_PIN    44 //D7
 
 #endif
 //===============================================================
