@@ -44,6 +44,7 @@
 #include "nvs_args.h"
 
 #include "osd.h"
+#include "msp.h"
 
 uint16_t g_wifi_channel;
 static int s_stats_last_tp = -10000;
@@ -908,6 +909,7 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
 //constexpr size_t MAX_TELEMETRY_PAYLOAD_SIZE = 512;
 constexpr size_t MAX_TELEMETRY_PAYLOAD_SIZE = 128;
 
+#ifdef UART_MAVLINK
 //=============================================================================================
 //=============================================================================================
 IRAM_ATTR void send_air2ground_data_packet()
@@ -930,7 +932,7 @@ IRAM_ATTR void send_air2ground_data_packet()
 
     s_stats.out_telemetry_data += ds;
 
-    ESP_ERROR_CHECK( uart_read_bytes(UART_NUM_2, packet_data + sizeof(Air2Ground_Data_Packet), MAX_TELEMETRY_PAYLOAD_SIZE, 0));
+    ESP_ERROR_CHECK( uart_read_bytes(UART_MAVLINK, packet_data + sizeof(Air2Ground_Data_Packet), MAX_TELEMETRY_PAYLOAD_SIZE, 0));
 
     if (!s_fec_encoder.flush_encode_packet(true))
     {
@@ -938,7 +940,9 @@ IRAM_ATTR void send_air2ground_data_packet()
         s_stats.wlan_error_count++;
     }
 }
+#endif
 
+#ifdef UART_MSP_OSD
 //=============================================================================================
 //=============================================================================================
 IRAM_ATTR void send_air2ground_osd_packet()
@@ -966,7 +970,7 @@ IRAM_ATTR void send_air2ground_osd_packet()
         s_stats.wlan_error_count++;
     }
 }
-
+#endif
 
 constexpr size_t MAX_VIDEO_DATA_PAYLOAD_SIZE = AIR2GROUND_MTU - sizeof(Air2Ground_Video_Packet);
 
@@ -1206,7 +1210,9 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
             applyAdaptiveQuality();
             s_video_full_frame_size = 0;
 
+#ifdef UART_MSP_OSD
             send_air2ground_osd_packet();
+#endif            
         }
     }
 
@@ -1529,12 +1535,15 @@ extern "C" void app_main()
         xSemaphoreGive(s_serial_mux);
 #endif
 
+#ifdef UART_MSP_OSD
+    g_msp.loop();
+#endif
+
     }
 
 }
 
 /*
-
 Air receive:
 1) packet_received_cb()- called by Wifi library when wifi packet is received
   - feeds data to s_fec_decoder.decode_data(). No data type checking at all.
@@ -1567,19 +1576,5 @@ Air send:
 3) wifi_tx_proc
  - reads s_wlan_outgoing_queue
  - calls esp_wifi_80211_tx() 
-  
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 */

@@ -4,8 +4,8 @@
 #include <cstring>
 #include <cstdint>
 
-/*
 
+/*
 constexpr uint8_t WLAN_IEEE_HEADER_AIR2GROUND[] =
 {
     0x08, 0x01, 0x00, 0x00,
@@ -17,11 +17,11 @@ constexpr uint8_t WLAN_IEEE_HEADER_AIR2GROUND[] =
 */
 
 
-//first byte -frame control
+//first byte - frame control
 //https://www.geeksforgeeks.org/ieee-802-11-mac-frame/
 //https://en.wikipedia.org/wiki/802.11_Frame_Types
 //each byte shifted from lower bits
-//08 = 00 version, 01 frame type, 0000 subype
+//08 = 00 version, 01 frame type, 0000 subtype
 constexpr uint8_t WLAN_IEEE_HEADER_AIR2GROUND[] =
 {
     0x08, 0x00, 0x00, 0x00,
