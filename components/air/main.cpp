@@ -950,7 +950,6 @@ IRAM_ATTR void send_air2ground_osd_packet()
         return ;
     }
 
-
     Air2Ground_OSD_Packet& packet = *(Air2Ground_OSD_Packet*)packet_data;
     packet.type = Air2Ground_Header::Type::OSD;
     packet.size = sizeof(Air2Ground_OSD_Packet);

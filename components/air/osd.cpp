@@ -15,10 +15,12 @@ OSD::OSD()
 //==============================================================
 void* OSD::getBuffer()
 {
+    /*
     for ( int i = 0; i < 10; i++)
     {
         this->buffer.screenLow[10][10+i]++;
     }
+    */
     return &this->buffer;
 }
 
