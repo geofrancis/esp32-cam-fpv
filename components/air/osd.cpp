@@ -29,7 +29,7 @@ void OSD::clear()
 void OSD::commit()
 {
     this->delayedUpdate = 0;
-    this->changed = false;
+    this->changed = true;
 }
 
 

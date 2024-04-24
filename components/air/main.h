@@ -28,6 +28,7 @@
 #define INIT_UART_2
 #define TXD2_PIN    12   //should be low at boot!!!
 #define RXD2_PIN    13 
+#define UART2_BAUDRATE 115200
 
 #define STATUS_LED_PIN GPIO_NUM_33
 #define STATUS_LED_ON 0
@@ -64,10 +65,12 @@
 #define INIT_UART_1
 #define TXD1_PIN    2 //D1
 #define RXD1_PIN    4 //D3
+#define UART1_BAUDRATE 115200
 
 #define INIT_UART_2
 #define TXD2_PIN    43 //D6
 #define RXD2_PIN    44 //D7
+#define UART2_BAUDRATE 115200
 
 #endif
 //===============================================================

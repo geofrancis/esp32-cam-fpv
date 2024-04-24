@@ -932,7 +932,9 @@ IRAM_ATTR void send_air2ground_data_packet()
 
     s_stats.out_telemetry_data += ds;
 
-    ESP_ERROR_CHECK( uart_read_bytes(UART_MAVLINK, packet_data + sizeof(Air2Ground_Data_Packet), MAX_TELEMETRY_PAYLOAD_SIZE, 0));
+    //MAX_TELEMETRY_PAYLOAD_SIZE is available in buffer. It was checked before.
+    //if uart_read_bytes() can not read specified number of bytes, it returns error.
+    //ESP_ERROR_CHECK( uart_read_bytes(UART_MAVLINK, packet_data + sizeof(Air2Ground_Data_Packet), MAX_TELEMETRY_PAYLOAD_SIZE, 0));
 
     if (!s_fec_encoder.flush_encode_packet(true))
     {
@@ -1211,7 +1213,10 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
             s_video_full_frame_size = 0;
 
 #ifdef UART_MSP_OSD
+        if ( g_osd.isChanged() )
+        {
             send_air2ground_osd_packet();
+        }
 #endif            
         }
     }
@@ -1440,7 +1445,7 @@ extern "C" void app_main()
 #ifdef INIT_UART_2
 
     uart_config_t uart_config2 = {
-        .baud_rate = 115200,
+        .baud_rate = UART2_BAUDRATE,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
@@ -1458,7 +1463,7 @@ extern "C" void app_main()
 #ifdef INIT_UART_1
 
     uart_config_t uart_config1 = {
-        .baud_rate = 115200,
+        .baud_rate = UART1_BAUDRATE,
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,
