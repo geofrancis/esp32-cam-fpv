@@ -1,5 +1,5 @@
 # ESP-VTX
-Digital,low latency video transmitter base on ESP32   
+Digital,low latency video transmitter based on ESP32   
 origin project: https://github.com/RomanLut/esp32-cam-fpv   
 
 ## Features:
