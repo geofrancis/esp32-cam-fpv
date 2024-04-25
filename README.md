@@ -1,13 +1,11 @@
 # ESP-VTX
-Digital,low latency video transmitter base on ESP32
-origin project:https://github.com/jeanlemotan/esp32-cam-fpv
+Digital,low latency video transmitter base on ESP32   
+origin project: https://github.com/RomanLut/esp32-cam-fpv   
 
 ## Features:
 It uses FEC encoding (2/3 currently configured) with 1400 byte packets and it achieves quite good performance:
-* Up to 54Mbps video rate.
-* More than 80 FPS at 320x240 or lower with 20-50 ms latency.
-* 30+ FPS at 800x600 or 640x480 with 50-80 ms latency.
-* 12 FPS at 1024x768 with >100 ms latency.
+* 800k video rate
+* 30 FPS at 800x600 with 50-80 ms latency.
 * run at any ESP-cam boards(like AI Thinker etc.) with OV2640.
 
 ## Theory
@@ -25,7 +23,7 @@ It's then uploaded to 3 separate textures as YUV and converted to RGB in a shade
 The link is bi-directional so the ground station can send data to the air unit. At the moment it sends camera and wifi configuration data but I plan to have a full bi-directional serial port for telemetry coming soon.\
 The back link uses 64byte packets with a 2/6 FEC encoding (so quite solid) at a low wifi rate (I think 1Mb).
 
-This is very WIP at the moment, but it proves that the ESP32 can definitely stream video with very low latency. \
+This is very WIP at the moment, but it proves that the ESP32 can definitely stream video with very low latency. 
 I plan to use this is a long range micro quad.
 
 https://www.youtube.com/watch?v=UE7nGN3aSVI      
@@ -69,7 +67,10 @@ sudo nano /home/pi/fpv.sh
     sudo ip link set wlan1 up
     sudo ./gs -fullscreen 1 -sm 1 -rx wlan1 -tx wlan1
 
-save                  
+CTRL + O
+ENTER
+CTRL + X
+                 
 
 sudo chmod +x /home/pi/fpv.sh                    
 
@@ -81,9 +82,9 @@ nano /home/pi/.config/autostart/fpv.desktop
     Name=FPV
     Exec=/usr/bin/bash /home/pi/fpv.sh
 
-save              
-
-VSync is disabled and on a PI4 you should get > 200FPS if everything went ok and you have configured the PI correctly.
+CTRL + O
+ENTER
+CTRL + X
 
 
 
