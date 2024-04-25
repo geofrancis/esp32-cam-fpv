@@ -57,10 +57,6 @@ sudo apt-get install -y aircrack-ng
 sudo apt-get install dkms           
 sudo apt install -y raspberrypi-kernel-headers build-essential bc dkms git           
 
-if using a 32bit OS:           
-sudo nano /boot/config.txt               
-add " arm_64bit=0" to bottom of file save and reboot            
-
 mkdir -p ~/src               
 cd ~/src                   
 git clone https://github.com/morrownr/8812au-20210629.git
