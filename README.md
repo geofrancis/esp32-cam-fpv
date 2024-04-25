@@ -51,31 +51,31 @@ https://user-images.githubusercontent.com/10252034/116135308-43c08c00-a6d1-11eb-
 ### Raspberry Pi ground station:
 - I use a Raspberry Pi 4 but any 64bit board and OS should work.
 
-sudo apt update && sudo apt upgrade
-sudo apt install libdrm-dev libgbm-dev libgles2-mesa-dev libpcap-dev libturbojpeg0-dev libts-dev libsdl2-dev libfreetype6-dev
-sudo apt-get install -y aircrack-ng
-sudo apt-get install dkms
-sudo apt install -y raspberrypi-kernel-headers build-essential bc dkms git
+sudo apt update && sudo apt upgrade           
+sudo apt install libdrm-dev libgbm-dev libgles2-mesa-dev libpcap-dev libturbojpeg0-dev libts-dev libsdl2-dev libfreetype6-dev             
+sudo apt-get install -y aircrack-ng            
+sudo apt-get install dkms           
+sudo apt install -y raspberrypi-kernel-headers build-essential bc dkms git           
 
-if using a 32bit OS:
-sudo nano /boot/config.txt
-add " arm_64bit=0" to bottom of file save and reboot
+if using a 32bit OS:           
+sudo nano /boot/config.txt               
+add " arm_64bit=0" to bottom of file save and reboot            
 
-mkdir -p ~/src
-cd ~/src
+mkdir -p ~/src               
+cd ~/src                   
 git clone https://github.com/morrownr/8812au-20210629.git
-cd ~/src/8812au-20210629
-sudo ./install-driver.sh
+cd ~/src/8812au-20210629                 
+sudo ./install-driver.sh              
 
-config = NO
-restart = YES
+config = NO                     
+restart = YES               
 
-git clone https://github.com/RomanLut/esp32-cam-fpv.git
-cd ./esp32-cam-fpv/gs
-git submodule update --init --recursive
-make -j4
+git clone https://github.com/RomanLut/esp32-cam-fpv.git                   
+cd ./esp32-cam-fpv/gs                         
+git submodule update --init --recursive                  
+make -j4               
 
-sudo nano /home/pi/fpv.sh
+sudo nano /home/pi/fpv.sh                 
 
     #!/bin/bash
 
@@ -88,19 +88,19 @@ sudo nano /home/pi/fpv.sh
     sudo ip link set wlan1 up
     sudo ./gs -fullscreen 1 -sm 1 -rx wlan1 -tx wlan1
 
-save
+save                  
 
-sudo chmod +x /home/pi/fpv.sh
+sudo chmod +x /home/pi/fpv.sh                    
 
-mkdir /home/pi/.config/autostart
-nano /home/pi/.config/autostart/fpv.desktop
+mkdir /home/pi/.config/autostart                  
+nano /home/pi/.config/autostart/fpv.desktop             
 
     [Desktop Entry]
     Type=Application
     Name=FPV
     Exec=/usr/bin/bash /home/pi/fpv.sh
 
-save
+save              
 
 VSync is disabled and on a PI4 you should get > 200FPS if everything went ok and you have configured the PI correctly.
 
