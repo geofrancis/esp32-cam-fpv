@@ -35,18 +35,9 @@ Here is a video shot at 30 FPS at 800x600 (video converted from the source mjpeg
 
 https://user-images.githubusercontent.com/10252034/116135308-43c08c00-a6d1-11eb-99b9-9dbb106b6489.mp4
 
-## Building
+
 ### esp32 firmware:
-- Uses esp-idf-v4.3-beta1, can probably work with newer idf versions. It needs to be properly installed (follow the instructions in the IDF documentation)
-- Only the Ai Thinker esp cam board tested
-- In the air_firmware, execute this: `idf.py -p /dev/tty.usbserial1 flash monitor`. Replace `tty.usbserial1` with your serial port.
-- Make sure you place the board in flashing mode bu connecting IO0 to GND and resetting the board.
-- After compiling and resetting, you should get some stats per second, smth like this in the console:\
-`WLAN S: 695196, R: 350, E: 0, D: 0, % : 0 || FPS: 64, D: 401268 || D: 0, E: 0`\
-`WLAN S: 761616, R: 420, E: 0, D: 0, % : 0 || FPS: 69, D: 443679 || D: 0, E: 0`\
-`WLAN S: 763092, R: 420, E: 0, D: 0, % : 0 || FPS: 69, D: 449410 || D: 0, E: 0`\
-`WLAN S: 764568, R: 420, E: 0, D: 0, % : 0 || FPS: 69, D: 450996 || D: 0, E: 0`\
-`WLAN S: 761616, R: 350, E: 0, D: 0, % : 0 || FPS: 69, D: 449347 || D: 0, E: 0`
+Flash ESP32 binary to address 10000 using web flasher or esptool.
 
 ### Raspberry Pi ground station:
 - I use a Raspberry Pi 4 but any 64bit board and OS should work.
