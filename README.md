@@ -19,9 +19,6 @@ The wifi data is send using packet injection with configurable rate - from 2 MB 
 The air unit can also record the video straight from the camera to a sd card. The format is a rudimentary MJPEG without any header so when playing back the FPS will be whatever your player will decide.\
 There is significant buffering when writing to SD (3MB at the moment) to work around the very regular slowdowns of sd cards.
 
-
-The receiver is a Raspberry PI 4 with 2 wifi adapters in monitor mode (TL-WN722N). The adapters work as diversity receivers and the data is reconstructed from the FEC packets.
-
 The JPEG decoding is done with turbojpeg to lower latency and - based on the resolution - can take between 1 and 7 milliseconds.\
 It's then uploaded to 3 separate textures as YUV and converted to RGB in a shader.
 
