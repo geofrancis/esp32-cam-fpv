@@ -32,7 +32,7 @@ https://www.youtube.com/watch?v=lh8CYKR0TSs
 Flash ESP32 binary to address 10000 using web flasher or esptool.
 
 ### Raspberry Pi ground station:
-- I use a Raspberry Pi 4 but any 64bit board and OS should work.
+- I use a Raspberry Pi 4 but any 64bit pi board and OS should work.
 
 sudo apt update && sudo apt upgrade           
 sudo apt install libdrm-dev libgbm-dev libgles2-mesa-dev libpcap-dev libturbojpeg0-dev libts-dev libsdl2-dev libfreetype6-dev             
