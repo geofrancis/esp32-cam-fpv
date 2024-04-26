@@ -31,6 +31,8 @@
 
 #include "socket.h"
 
+#include "ini.h"
+
 #ifdef TEST_LATENCY
 extern "C"
 {
@@ -39,7 +41,7 @@ extern "C"
 #endif
 /*
 
-Changed on the PI:
+Changes on the PI:
 
 - Disable the compositor from raspi-config. This will increase FPS
 - Change from fake to real driver: dtoverlay=vc4-fkms-v3d to dtoverlay=vc4-kms-v3d
@@ -125,14 +127,18 @@ static uint32_t s_test_latency_gpio_value = 0;
 static Clock::time_point s_test_latency_gpio_last_tp = Clock::now();
 #endif
 
-struct{
+struct
+{
     int socket_fd;
     bool record;
     FILE * record_file=nullptr;
     std::mutex record_mutex;
     int wifi_channel;
     bool stats;
-}s_groundstation_config;
+} s_groundstation_config;
+
+mINI::INIStructure ini;
+mINI::INIFile s_iniFile("gs.ini");
 
 float video_fps = 0;
 int s_min_rssi = 0;
@@ -157,8 +163,6 @@ Stats s_frameQuality_stats;
 Stats s_dataSize_stats;
 
 OSD g_osd;
-
-
 
 static void comms_thread_proc()
 {
@@ -441,7 +445,7 @@ static void comms_thread_proc()
                         auto current_time = Clock::now();
                         auto duration_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_frame_decoded);
                         auto milliseconds_since_last_frame = duration_since_last_frame.count();
-                        if( milliseconds_since_last_frame > 50) milliseconds_since_last_frame = 50;
+                        if( milliseconds_since_last_frame > 100) milliseconds_since_last_frame = 100;
                         s_frameTime_stats.add((uint8_t)milliseconds_since_last_frame);
                         last_frame_decoded = current_time;
 
@@ -582,7 +586,7 @@ int run(char* argv[])
 
     s_comms_thread = std::thread(&comms_thread_proc);
 
-    Ground2Air_Config_Packet config=s_ground2air_config_packet;
+    Ground2Air_Config_Packet config = s_ground2air_config_packet;
 
     size_t video_frame_count = 0;
 
@@ -631,7 +635,7 @@ int run(char* argv[])
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.25f);
                 ImGui::PlotHistogram("Frames", Stats::getter, &s_frame_stats, s_frame_stats.count(), 0, NULL, 0, 3.0f, ImVec2(0, 24));            
                 ImGui::PlotHistogram("Parts", Stats::getter, &s_frameParts_stats, s_frameParts_stats.count(), 0, NULL, 0, s_frameParts_stats.average()*2 + 1.0f, ImVec2(0, 60));
-                ImGui::PlotHistogram("Period", Stats::getter, &s_frameTime_stats, s_frameTime_stats.count(), 0, NULL, 0, 50.0f, ImVec2(0, 60));
+                ImGui::PlotHistogram("Period", Stats::getter, &s_frameTime_stats, s_frameTime_stats.count(), 0, NULL, 0, 100.0f, ImVec2(0, 60));
 
                 sprintf(overlay, "cur: %d", s_curr_quality);
                 ImGui::PlotHistogram("Quality", Stats::getter, &s_frameQuality_stats, s_frameQuality_stats.count(), 0, overlay, 0, 64.0f, ImVec2(0, 60));
@@ -734,7 +738,13 @@ int run(char* argv[])
             }
 */            
             {
+                int ch = s_groundstation_config.wifi_channel;
                 ImGui::SliderInt("WIFI Channel", &s_groundstation_config.wifi_channel, 1, 13);
+                if ( ch != s_groundstation_config.wifi_channel)
+                {
+                    ini["gs"]["wifi_channel"] = std::to_string(s_groundstation_config.wifi_channel);
+                    s_iniFile.write(ini);
+                }
             }
             {
                 //ImGui::Checkbox("LC", &config.camera.lenc);
@@ -787,9 +797,12 @@ int run(char* argv[])
                 bRestart = true;
             }
 
-            if ( bRestart ) {
+            if ( bRestart ) 
+            {
+                //start sending new channel to air, restart after 2 seconds
                 config.wifi_channel = s_groundstation_config.wifi_channel;
-                if (Clock::now() - restart_tp >= std::chrono::milliseconds(2000)) {
+                if (Clock::now() - restart_tp >= std::chrono::milliseconds(2000)) 
+                {
                     bRestart = false;
                     char tempstr[30];
                     sprintf(tempstr,"ESPVTX_WIFI_CHN=%d",s_groundstation_config.wifi_channel);
@@ -902,8 +915,9 @@ bool init_uart()
 //===================================================================================
 int main(int argc, const char* argv[])
 {
-
     init_crc8_table();
+
+    s_iniFile.read(ini);
 
     Comms::RX_Descriptor rx_descriptor;
     rx_descriptor.interfaces = {"wlan0mon"};
@@ -913,7 +927,7 @@ int main(int argc, const char* argv[])
 
     s_hal.reset(new PI_HAL());
 
-    Ground2Air_Config_Packet& config=s_ground2air_config_packet;
+    Ground2Air_Config_Packet& config = s_ground2air_config_packet;
     //config.wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
     //config.camera.resolution = Resolution::SVGA;
     //config.camera.fps_limit = 30;
@@ -921,12 +935,17 @@ int main(int argc, const char* argv[])
 
     s_groundstation_config.stats = false;
     {
-        char *temp = getenv("ESPVTX_WIFI_CHN");
-        if(temp){
-            s_groundstation_config.wifi_channel = atoi(temp);
-            config.wifi_channel = s_groundstation_config.wifi_channel;
-        }else{
-            s_groundstation_config.wifi_channel = config.wifi_channel;
+        std::string& temp = ini["gs"]["wifi_channel"];
+        int channel = atoi(temp.c_str());
+        if ((channel >= 1) && (channel <=13) )
+        {
+            s_groundstation_config.wifi_channel = channel;
+            config.wifi_channel = channel;
+        }
+        else
+        {
+            s_groundstation_config.wifi_channel = DEFAULT_WIFI_CHANNEL;
+            config.wifi_channel = DEFAULT_WIFI_CHANNEL;
         }
     }
 
@@ -988,7 +1007,7 @@ int main(int argc, const char* argv[])
             printf("-p <gd_ip>, default: disabled\n");
             printf("-k <rx_fec_k>, default: 2\n");
             printf("-n <rx_fec_n>, default: 6\n");
-            printf("-ch <wifi_channel>, default: 11\n");
+            printf("-ch <wifi_channel>, default: 7\n");
             printf("-w <width>, default: 1280\n");
             printf("-h <width>, default: 720\n");
             printf("-fullscreen <1/0>, default: 1\n");
