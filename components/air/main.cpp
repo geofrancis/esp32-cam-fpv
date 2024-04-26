@@ -57,6 +57,7 @@ static uint32_t s_video_frame_index = 0;
 static uint8_t s_video_part_index = 0;
 static bool s_video_frame_started = false;
 static size_t s_video_full_frame_size = 0;
+static uint8_t s_osdUpdateCounter = 0;
 
 static int s_quality = 20;
 static float s_quality_framesize_K1 = 1;
@@ -71,7 +72,6 @@ static uint8_t s_max_wlan_outgoing_queue_usage = 0;
 
 extern WIFI_Rate s_wlan_rate;
 
-static bool SDDetected = false;
 static bool SDError = false;
 static uint16_t SDTotalSpaceGB16 = 0;
 static uint16_t SDFreeSpaceGB16 = 0;
@@ -86,11 +86,7 @@ static int s_uart_verbose = 1;
 
  sdmmc_card_t* card = nullptr;
 
-#ifdef DVR_SUPPORT
-static bool s_air_record = true;
-#else
 static bool s_air_record = false;
-#endif
 
 static bool s_shouldRestart = false;
 
@@ -306,6 +302,7 @@ Circular_Buffer* s_sd_slow_buffer = NULL;
 static constexpr size_t SD_WRITE_BLOCK_SIZE = 2048;
 
 
+/*
 static void shutdown_sd()
 {
     if (!s_sd_initialized)
@@ -317,7 +314,27 @@ static void shutdown_sd()
     s_sd_initialized = false;
 
     //to turn the LED off
+#ifdef BOARD_ESP32CAM    
     gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);    // D1, needed in 4-line mode only
+#endif    
+}
+*/
+void updateSDInfo()
+{
+    if ( !s_sd_initialized) return;
+
+    /* Get volume information and free clusters of sdcard */
+    FATFS *fs;
+    DWORD free_clust ;
+    auto res = f_getfree("/sdcard/", &free_clust, &fs);
+    if (res == 0 ) 
+    {
+        DWORD free_sect = free_clust * fs->csize;
+        DWORD tot_sect = fs->n_fatent * fs->csize;
+
+        SDFreeSpaceGB16 = free_sect / 2 / 1024 / (1024/16);
+        SDTotalSpaceGB16 = tot_sect / 2 / 1024 / (1024/16);
+	}
 }
 
 static bool init_sd()
@@ -365,7 +382,6 @@ static bool init_sd()
         gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);
         return false;
     }
-    SDDetected = true;
 #endif
 #ifdef BOARD_XIAOS3SENSE
 /*
@@ -399,7 +415,7 @@ static bool init_sd()
     // This initializes the slot without card detect (CD) and write protect (WP) signals.
     // Modify slot_config.gpio_cd and slot_config.gpio_wp if your board has these signals.
     sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.gpio_cs = GPIO_NUM_21;
+    slot_config.gpio_cs = GPIO_NUM_21;  //shared with USER LED pin
     slot_config.host_id = (spi_host_device_t)host.slot;
 
     LOG("Mounting SD card...\n");
@@ -439,32 +455,21 @@ static bool init_sd()
     if (ret != ESP_OK)
     {
         LOG("Failed to mount SD card VFAT filesystem. Error: %s\n", esp_err_to_name(ret));
-        //to turn the LED off
-        gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);    // D1, needed in 4-line mode only   REVIEW: remove this code?
         return false;
     }
-    SDDetected = true;
-
 #endif
 
     LOG("sd card inited!\n");
     s_sd_initialized = true;
 
+#ifdef DVR_SUPPORT
+    s_air_record = true;
+#endif
+
     // Card has been initialized, print its properties
     sdmmc_card_print_info(stdout, card);
 
-    /* Get volume information and free clusters of sdcard */
-    FATFS *fs;
-    DWORD free_clust ;
-    auto res = f_getfree("/sdcard/", &free_clust, &fs);
-    if (res == 0 ) 
-    {
-        DWORD free_sect = free_clust * fs->csize;
-        DWORD tot_sect = fs->n_fatent * fs->csize;
-
-        SDFreeSpaceGB16 = free_sect / 2 / 1024 / (1024/16);
-        SDTotalSpaceGB16 = tot_sect / 2 / 1024 / (1024/16);
-	}
+    updateSDInfo();
 
     //find the latest file number
     char buffer[64];
@@ -521,6 +526,7 @@ static void sd_write_proc(void*)
         if (!f)
         {
             s_air_record = false;
+            SDError = true;
             vTaskDelay(1000 / portTICK_PERIOD_MS); 
             continue;
         }
@@ -585,10 +591,13 @@ static void sd_write_proc(void*)
             fflush(f);
             fsync(fileno(f));
             fclose(f);
-        }else{
-            shutdown_sd();
+            updateSDInfo();
         }
-
+        else
+        {
+            s_air_record = false;
+            //shutdown_sd();
+        }
     }
 }
 
@@ -601,7 +610,8 @@ static void sd_enqueue_proc(void*)
     {
         if (!s_air_record)
         {
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            //vTaskDelay(1000 / portTICK_PERIOD_MS);
+            ulTaskNotifyTake(pdTRUE, 1000 / portTICK_PERIOD_MS); //wait for notification
             continue;
         }
 
@@ -966,7 +976,7 @@ IRAM_ATTR void send_air2ground_osd_packet()
     packet.version = PACKET_VERSION;
     packet.crc = 0;
 
-    packet.SDDetected = SDDetected ? 1: 0;
+    packet.SDDetected = s_sd_initialized ? 1: 0;
     packet.SDSlow = s_stats.sd_drops ? 1: 0;
     packet.SDError = SDError ? 1: 0;
     packet.curr_wifi_rate = (uint8_t)s_wlan_rate;
@@ -1228,9 +1238,14 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
             applyAdaptiveQuality();
             s_video_full_frame_size = 0;
 
-            if ( g_osd.isChanged() )
+            if ( g_osd.isChanged() || (s_osdUpdateCounter == 15))
             {
                 send_air2ground_osd_packet();
+                s_osdUpdateCounter = 0;
+            }
+            else
+            {
+                s_osdUpdateCounter++;
             }
         }
     }
