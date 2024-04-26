@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include "packets.h"
+#include "main.h"
 
 
 #ifdef ESP_PLATFORM
@@ -13,6 +14,7 @@
 #define IRAM_ATTR
 #endif
 
+#ifdef UART_MSP_OSD
 
 class OSD
 {
@@ -20,11 +22,17 @@ private:
 
     struct OSDBuffer buffer;
     bool changed;
+    int64_t delayedUpdate;
 
 public:
     OSD();
     IRAM_ATTR void* getBuffer();
     bool isChanged();
+    void clear();
+    void commit();
+    void writeString(unsigned int row, unsigned int col, int isExtChar, uint8_t* str, int len);
 };
 
 extern OSD g_osd;
+
+#endif //UART_MSP_OSD
