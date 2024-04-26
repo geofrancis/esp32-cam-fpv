@@ -146,9 +146,15 @@ Clock::time_point restart_tp;
 uint16_t s_SDTotalSpaceGB16 = 0;
 uint16_t s_SDFreeSpaceGB16 = 0;
 bool s_air_record = false;
+bool s_SDDetected = false;
+bool s_SDSlow = false;
+bool s_SDError = false;
 
 Stats s_frame_stats;
 Stats s_frameParts_stats;
+Stats s_frameTime_stats;
+Stats s_frameQuality_stats;
+Stats s_dataSize_stats;
 
 OSD g_osd;
 
@@ -157,10 +163,12 @@ OSD g_osd;
 static void comms_thread_proc()
 {
     Clock::time_point last_stats_tp = Clock::now();
+    Clock::time_point last_stats_tp10 = Clock::now();
     Clock::time_point last_comms_sent_tp = Clock::now();
     Clock::time_point last_data_sent_tp = Clock::now();
     uint8_t last_sent_ping = 0;
     Clock::time_point last_ping_sent_tp = Clock::now();
+    Clock::time_point last_frame_decoded = Clock::now();
     Clock::duration ping_min = std::chrono::seconds(999);
     Clock::duration ping_max = std::chrono::seconds(0);
     Clock::duration ping_avg = std::chrono::seconds(0);
@@ -169,6 +177,7 @@ static void comms_thread_proc()
     size_t in_tlm_size = 0;
     size_t out_tlm_size = 0;
     size_t total_data = 0;
+    size_t total_data10 = 0;
     int16_t min_rssi = 0;
 
     std::vector<uint8_t> video_frame;
@@ -219,6 +228,15 @@ static void comms_thread_proc()
             total_data = 0;
             min_rssi = 0;
             last_stats_tp = Clock::now();
+        }
+
+        if (Clock::now() - last_stats_tp10 >= std::chrono::milliseconds(100))
+        {
+            total_data10 /= 1024;
+            if ( total_data10 > 255 ) total_data10 = 255;
+            s_dataSize_stats.add(total_data10);
+            total_data10 = 0;
+            last_stats_tp10 = Clock::now();
         }
 
         if (Clock::now() - last_comms_sent_tp >= std::chrono::milliseconds(500))
@@ -340,13 +358,6 @@ static void comms_thread_proc()
                     break;
                 }
 
-                s_curr_wifi_rate = air2ground_video_packet.curr_wifi_rate;
-                s_curr_quality = air2ground_video_packet.curr_quality;
-                s_wifi_queue = air2ground_video_packet.wifi_queue;
-                s_SDTotalSpaceGB16 = air2ground_video_packet.totalSpaceGB16;
-                s_SDFreeSpaceGB16 = air2ground_video_packet.freeSpaceGB16;
-                s_air_record = air2ground_video_packet.air_record_state !=0;
-
                 if (air2ground_video_packet.pong == last_sent_ping)
                 {
                     last_sent_ping++;
@@ -358,6 +369,7 @@ static void comms_thread_proc()
                 }
 
                 total_data += rx_data.size;
+                total_data10 += rx_data.size;
                 min_rssi = std::min(min_rssi, rx_data.rssi);
                 //LOGI("OK Video frame {}, {} {} - CRC OK {}. {}", air2ground_video_packet.frame_index, (int)air2ground_video_packet.part_index, payload_size, crc, rx_queue.size());
 
@@ -377,6 +389,8 @@ static void comms_thread_proc()
                         //video_frame_index - not all parts are received, frame is lost
                         s_lost_frame_count++;
                         s_frame_stats.add(0);
+                        s_frameTime_stats.add(0);
+                        s_frameQuality_stats.add(0);
                         s_frameParts_stats.add(video_next_part_index);
                     }
 
@@ -387,6 +401,8 @@ static void comms_thread_proc()
                         df--;
                         s_lost_frame_count += df;
                         s_frame_stats.addMultiple( 0, df );
+                        s_frameTime_stats.addMultiple( 0, df );
+                        s_frameQuality_stats.addMultiple( 0, df );
                         s_frameParts_stats.addMultiple( 0, df );
                     }
 
@@ -420,6 +436,14 @@ static void comms_thread_proc()
 
                         s_frame_stats.add(video_restoredByFEC ? 1 : 3);
                         s_frameParts_stats.add(air2ground_video_packet.part_index);
+                        s_frameQuality_stats.add(s_curr_quality);
+
+                        auto current_time = Clock::now();
+                        auto duration_since_last_frame = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - last_frame_decoded);
+                        auto milliseconds_since_last_frame = duration_since_last_frame.count();
+                        if( milliseconds_since_last_frame > 50) milliseconds_since_last_frame = 50;
+                        s_frameTime_stats.add((uint8_t)milliseconds_since_last_frame);
+                        last_frame_decoded = current_time;
 
                         video_restoredByFEC = false;
                     }
@@ -451,7 +475,7 @@ static void comms_thread_proc()
                     break;
                 }
 
-                total_data += rx_data.size;
+                total_data10 += rx_data.size;
                 min_rssi = std::min(min_rssi, rx_data.rssi);
                 //LOGI("OK Telemetry frame {} - CRC OK {}. {}", payload_size, crc, rx_queue.size());
 
@@ -481,8 +505,18 @@ static void comms_thread_proc()
                     LOGE("OSD frame: crc mismatch: {} != {}", crc, computed_crc);
                     break;
                 }
-
                 total_data += rx_data.size;
+                total_data10 += rx_data.size;
+
+                s_curr_wifi_rate = (WIFI_Rate)air2ground_osd_packet.curr_wifi_rate;
+                s_curr_quality = air2ground_osd_packet.curr_quality;
+                s_wifi_queue = air2ground_osd_packet.wifi_queue;
+                s_SDTotalSpaceGB16 = air2ground_osd_packet.SDTotalSpaceGB16;
+                s_SDFreeSpaceGB16 = air2ground_osd_packet.SDFreeSpaceGB16;
+                s_air_record = air2ground_osd_packet.air_record_state != 0;
+                s_SDDetected = air2ground_osd_packet.SDDetected != 0;
+                s_SDError = air2ground_osd_packet.SDError != 0;
+                s_SDSlow = air2ground_osd_packet.SDSlow != 0;
 
                 g_osd.update( &air2ground_osd_packet.buffer );
             }
@@ -592,8 +626,20 @@ int run(char* argv[])
 
             if ( s_groundstation_config.stats )
             {
+                char overlay[32];
+
+                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.25f);
                 ImGui::PlotHistogram("Frames", Stats::getter, &s_frame_stats, s_frame_stats.count(), 0, NULL, 0, 3.0f, ImVec2(0, 24));            
                 ImGui::PlotHistogram("Parts", Stats::getter, &s_frameParts_stats, s_frameParts_stats.count(), 0, NULL, 0, s_frameParts_stats.average()*2 + 1.0f, ImVec2(0, 60));
+                ImGui::PlotHistogram("Period", Stats::getter, &s_frameTime_stats, s_frameTime_stats.count(), 0, NULL, 0, 50.0f, ImVec2(0, 60));
+
+                sprintf(overlay, "cur: %d", s_curr_quality);
+                ImGui::PlotHistogram("Quality", Stats::getter, &s_frameQuality_stats, s_frameQuality_stats.count(), 0, overlay, 0, 64.0f, ImVec2(0, 60));
+
+                sprintf(overlay, "avg: %d KB/sec", ((int)(s_dataSize_stats.average()+0.5f) )*10);
+                ImGui::PlotHistogram("DataSize", Stats::getter, &s_dataSize_stats, s_dataSize_stats.count(), 0, overlay, 0, 100.0f, ImVec2(0, 60));
+
+                ImGui::PopItemWidth();
             }
 
             g_osd.draw();
@@ -764,7 +810,9 @@ int run(char* argv[])
             }
             
             ImGui::Text("%.3f ms/frame (%.1f FPS) %.1f VFPS", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate, video_fps);
-            ImGui::Text("AIR SD Card: %.2fGB/%.2fGB", s_SDFreeSpaceGB16 / 16.0f, s_SDTotalSpaceGB16 / 16.0f);
+            ImGui::Text("AIR SD Card: %s%s%s %.2fGB/%.2fGB", 
+                s_SDDetected ? "Detected" : "Not detected", s_SDError ? " Error" :"",  s_SDSlow ? " Slow" : "",
+                s_SDFreeSpaceGB16 / 16.0f, s_SDTotalSpaceGB16 / 16.0f);
         }
         ImGui::End();
 
