@@ -148,6 +148,7 @@ WIFI_Rate s_curr_wifi_rate = WIFI_Rate::RATE_B_2M_CCK;
 int s_wifi_queue = 0;
 uint8_t s_curr_quality = 0;
 bool bRestart = false;
+bool bRestartRequired = false;
 Clock::time_point restart_tp;
 uint16_t s_SDTotalSpaceGB16 = 0;
 uint16_t s_SDFreeSpaceGB16 = 0;
@@ -744,8 +745,15 @@ int run(char* argv[])
                 {
                     ini["gs"]["wifi_channel"] = std::to_string(s_groundstation_config.wifi_channel);
                     s_iniFile.write(ini);
+                    bRestartRequired = true;
                 }
             }
+
+            if ( bRestartRequired)
+            {
+                ImGui::Text("*Restart to apply!");
+            }
+
             {
                 //ImGui::Checkbox("LC", &config.camera.lenc);
                 //ImGui::SameLine();
