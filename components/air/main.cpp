@@ -71,6 +71,7 @@ static uint8_t s_max_wlan_outgoing_queue_usage = 0;
 
 extern WIFI_Rate s_wlan_rate;
 
+static bool SDDetected = false;
 static uint16_t SDTotalSpaceGB16 = 0;
 static uint16_t SDFreeSpaceGB16 = 0;
 
@@ -91,7 +92,6 @@ static bool s_air_record = false;
 #endif
 
 static bool s_shouldRestart = false;
-
 
 //=============================================================================================
 //=============================================================================================
@@ -302,7 +302,7 @@ Circular_Buffer* s_sd_slow_buffer = NULL;
 
 //Cannot write to SD directly from the slow, SPIRAM buffer as that causes the write speed to plummet. So instead I read from the slow buffer into
 // this RAM block and write from it directly. This results in several MB/s write speed performance which is good enough.
-static constexpr size_t SD_WRITE_BLOCK_SIZE = 8192;
+static constexpr size_t SD_WRITE_BLOCK_SIZE = 2048;
 
 
 static void shutdown_sd()
@@ -361,9 +361,10 @@ static bool init_sd()
     {
         LOG("Failed to mount SD card VFAT filesystem. Error: %s\n", esp_err_to_name(ret));
         //to turn the LED off
-        gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);    // D1, needed in 4-line mode only
+        gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);
         return false;
     }
+    SDDetected = true;
 #endif
 #ifdef BOARD_XIAOS3SENSE
 /*
@@ -438,9 +439,10 @@ static bool init_sd()
     {
         LOG("Failed to mount SD card VFAT filesystem. Error: %s\n", esp_err_to_name(ret));
         //to turn the LED off
-        gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);    // D1, needed in 4-line mode only
+        gpio_set_pull_mode((gpio_num_t)4, GPIO_PULLDOWN_ONLY);    // D1, needed in 4-line mode only   REVIEW: remove this code?
         return false;
     }
+    SDDetected = true;
 
 #endif
 
@@ -503,7 +505,8 @@ static FILE* open_sd_file()
 //this will write data from the slow queue to file
 static void sd_write_proc(void*)
 {
-    uint8_t* block = (uint8_t*)heap_caps_malloc(SD_WRITE_BLOCK_SIZE, MALLOC_CAP_INTERNAL);//new uint8_t[SD_WRITE_BLOCK_SIZE];
+    //for fast SD writes, buffer has to be in DMA enabled memory
+    uint8_t* block = (uint8_t*)heap_caps_malloc(SD_WRITE_BLOCK_SIZE, MALLOC_CAP_DMA);//new uint8_t[SD_WRITE_BLOCK_SIZE];
 
     while (true)
     {
@@ -620,7 +623,10 @@ static void sd_enqueue_proc(void*)
             xSemaphoreGive(s_sd_fast_buffer_mux);
 
             xSemaphoreTake(s_sd_slow_buffer_mux, portMAX_DELAY);
-            s_sd_slow_buffer->write(buffer, size);
+            if ( !s_sd_slow_buffer->write(buffer, size) )
+            {
+                s_stats.sd_drops += size;
+            }
             xSemaphoreGive(s_sd_slow_buffer_mux);
 
             xSemaphoreTake(s_sd_fast_buffer_mux, portMAX_DELAY);
@@ -648,7 +654,9 @@ IRAM_ATTR static void add_to_sd_fast_buffer(const void* data, size_t size)
             xTaskNotifyGive(s_sd_enqueue_task); //notify task
     }
     else
+    {
         s_stats.sd_drops += size;
+    }
 }
 
 #endif
