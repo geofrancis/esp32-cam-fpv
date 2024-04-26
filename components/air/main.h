@@ -76,7 +76,6 @@
 //===============================================================
 
 
-#define DEFAULT_WIFI_CHANNEL 11
 extern uint16_t g_wifi_channel;
 
 

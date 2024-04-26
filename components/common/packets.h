@@ -2,6 +2,8 @@
 
 #include "structures.h"
 
+#define DEFAULT_WIFI_CHANNEL 7
+
 #define PACKET_VERSION 1
 
 #pragma pack(push, 1) // exact fit - no padding
@@ -86,7 +88,7 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
     uint8_t ping = 0; //used for latency measurement
     int8_t wifi_power = 20;//dBm
     WIFI_Rate wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
-    uint8_t wifi_channel = 7;
+    uint8_t wifi_channel = DEFAULT_WIFI_CHANNEL;
     uint8_t fec_codec_k = 6;
     uint8_t fec_codec_n = 12;
     uint16_t fec_codec_mtu = AIR2GROUND_MTU;
