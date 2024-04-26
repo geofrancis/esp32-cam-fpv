@@ -46,8 +46,7 @@
 #include "osd.h"
 #include "msp.h"
 
-uint16_t g_wifi_channel;
-static int s_stats_last_tp = -10000;
+ static int s_stats_last_tp = -10000;
 
 
 /////////////////////////////////////////////////////////////////////////
@@ -69,6 +68,8 @@ static int64_t s_video_last_acquired_tp = esp_timer_get_time();
 static bool s_video_skip_frame = false;
 static int64_t s_video_target_frame_dt = 0;
 static uint8_t s_max_wlan_outgoing_queue_usage = 0;
+
+static int64_t s_restart_time = 0;
 
 extern WIFI_Rate s_wlan_rate;
 
@@ -225,7 +226,10 @@ void checkButton()
 
     if ( buttonState )
     {
-        s_air_record = !s_air_record;
+        if ( s_restart_time == 0 )
+        {
+            s_air_record = !s_air_record;
+        }
         LOG("Button pressed!\n");
     }
     else
@@ -766,7 +770,11 @@ static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, boo
     if (dst.wifi_channel != src.wifi_channel)
     {
         LOG("Wifi channel changed from %d to %d\n", (int)dst.wifi_channel, (int)src.wifi_channel);
+        nvs_args_set("channel", src.wifi_channel);
         ESP_ERROR_CHECK(esp_wifi_set_channel((int)src.wifi_channel, WIFI_SECOND_CHAN_NONE));
+
+        s_air_record = false;
+        s_restart_time = esp_timer_get_time() + 2000000;
     }
 
     if (forceCameraSettings || (dst.camera.resolution != src.camera.resolution))
@@ -798,13 +806,16 @@ static void handle_ground2air_config_packetEx(Ground2Air_Config_Packet& src, boo
         LOG("Target FPS changed from %d to %d\n", (int)dst.camera.fps_limit, (int)src.camera.fps_limit);
     }
 
-    if ( dst.air_record_btn != src.air_record_btn )
+    if ( s_restart_time == 0 )
     {
-        if ( ((uint8_t)(dst.air_record_btn + 1)) == src.air_record_btn )
+        if ( dst.air_record_btn != src.air_record_btn )
         {
-            s_air_record = !s_air_record;
+            if ( ((uint8_t)(dst.air_record_btn + 1)) == src.air_record_btn )
+            {
+                s_air_record = !s_air_record;
+            }
+            dst.air_record_btn = src.air_record_btn;
         }
-        dst.air_record_btn = src.air_record_btn;
     }
 
 #define APPLY(n1, n2, type) \
@@ -1186,7 +1197,9 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
 
 #ifdef DVR_SUPPORT
                 if (s_air_record)
+                {
                     add_to_sd_fast_buffer(start_ptr, c);
+                }
 #endif
             }
         }
@@ -1425,15 +1438,17 @@ extern "C" void app_main()
     initialize_rec_button();
 
     nvs_args_init();
-    g_wifi_channel = (uint16_t)nvs_args_read("channel");
-    if(g_wifi_channel > 13){
-        g_wifi_channel = DEFAULT_WIFI_CHANNEL;
-        nvs_args_set("channel", g_wifi_channel);
-        LOG("could not find the nvs store variable:channel, set wifi channel to default %d", g_wifi_channel);
+
+    s_ground2air_config_packet.wifi_channel = (uint16_t)nvs_args_read("channel");
+    if(s_ground2air_config_packet.wifi_channel > 13)
+    {
+        s_ground2air_config_packet.wifi_channel = DEFAULT_WIFI_CHANNEL;
+        nvs_args_set("channel", DEFAULT_WIFI_CHANNEL);
     }
 
+    LOG("WIFI channel%d\n", s_ground2air_config_packet.wifi_channel );
 
-    setup_wifi(s_ground2air_config_packet.wifi_rate, g_wifi_channel, s_ground2air_config_packet.wifi_power, packet_received_cb);
+    setup_wifi(s_ground2air_config_packet.wifi_rate, s_ground2air_config_packet.wifi_channel, s_ground2air_config_packet.wifi_power, packet_received_cb);
 
 #ifdef DVR_SUPPORT
     init_sd();
@@ -1572,6 +1587,11 @@ extern "C" void app_main()
 #ifdef UART_MSP_OSD
     g_msp.loop();
 #endif
+
+        if ((s_restart_time!=0) && ( esp_timer_get_time()>s_restart_time))
+        {
+            esp_restart();
+        }
 
     }
 
