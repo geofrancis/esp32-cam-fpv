@@ -3,8 +3,6 @@
 
 #include "osd.h"
 
-#ifdef UART_MSP_OSD
-
 OSD g_osd;
 
 //==============================================================
@@ -87,5 +85,3 @@ bool OSD::isChanged()
     this->changed = false;
     return res;
 }
-
-#endif //UART_MSP_OSD

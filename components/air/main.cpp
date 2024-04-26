@@ -72,6 +72,7 @@ static uint8_t s_max_wlan_outgoing_queue_usage = 0;
 extern WIFI_Rate s_wlan_rate;
 
 static bool SDDetected = false;
+static bool SDError = false;
 static uint16_t SDTotalSpaceGB16 = 0;
 static uint16_t SDFreeSpaceGB16 = 0;
 
@@ -516,8 +517,6 @@ static void sd_write_proc(void*)
             continue;
         }
 
-        
-
         FILE* f = open_sd_file();
         if (!f)
         {
@@ -555,7 +554,9 @@ static void sd_write_proc(void*)
                 bool read = s_sd_slow_buffer->read(block, SD_WRITE_BLOCK_SIZE);
                 xSemaphoreGive(s_sd_slow_buffer_mux);
                 if (!read)
+                {
                     break; //not enough data, wait
+                }
 
                 if ( !done )
                 {
@@ -564,6 +565,7 @@ static void sd_write_proc(void*)
                         LOG("Error while writing! Stopping session\n");
                         done = true;
                         error = true;
+                        SDError = true;
                         break;
                     }
                     s_stats.sd_data += SD_WRITE_BLOCK_SIZE;
@@ -897,13 +899,7 @@ IRAM_ATTR void send_air2ground_video_packet(bool last)
     packet.last_part = last ? 1 : 0;
     packet.size = s_video_frame_data_size + sizeof(Air2Ground_Video_Packet);
     packet.pong = s_ground2air_config_packet.ping;
-    packet.wifi_queue = s_max_wlan_outgoing_queue_usage;
-    packet.air_record_state = s_air_record ? 1 : 0;
-    packet.curr_wifi_rate = s_wlan_rate;
     packet.version = PACKET_VERSION;
-    packet.freeSpaceGB16 = SDFreeSpaceGB16;
-    packet.totalSpaceGB16 = SDTotalSpaceGB16;
-    packet.curr_quality = s_quality;
     packet.crc = 0;
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_Video_Packet));
     if (!s_fec_encoder.flush_encode_packet(true))
@@ -952,7 +948,6 @@ IRAM_ATTR void send_air2ground_data_packet()
 }
 #endif
 
-#ifdef UART_MSP_OSD
 //=============================================================================================
 //=============================================================================================
 IRAM_ATTR void send_air2ground_osd_packet()
@@ -970,8 +965,22 @@ IRAM_ATTR void send_air2ground_osd_packet()
     packet.pong = s_ground2air_config_packet.ping;
     packet.version = PACKET_VERSION;
     packet.crc = 0;
+
+    packet.SDDetected = SDDetected ? 1: 0;
+    packet.SDSlow = s_stats.sd_drops ? 1: 0;
+    packet.SDError = SDError ? 1: 0;
+    packet.curr_wifi_rate = (uint8_t)s_wlan_rate;
+
+    packet.wifi_queue = s_max_wlan_outgoing_queue_usage;
+    packet.air_record_state = s_air_record ? 1 : 0;
+
+    packet.SDFreeSpaceGB16 = SDFreeSpaceGB16;
+    packet.SDTotalSpaceGB16 = SDTotalSpaceGB16;
+    packet.curr_quality = s_quality;
+    packet.unused = 0;
+
     memcpy( &packet.buffer, g_osd.getBuffer(), OSD_BUFFER_SIZE );
-    g_osd.getBuffer();
+    
     packet.crc = crc8(0, &packet, sizeof(Air2Ground_OSD_Packet));
 
     if (!s_fec_encoder.flush_encode_packet(true))
@@ -980,7 +989,6 @@ IRAM_ATTR void send_air2ground_osd_packet()
         s_stats.wlan_error_count++;
     }
 }
-#endif
 
 constexpr size_t MAX_VIDEO_DATA_PAYLOAD_SIZE = AIR2GROUND_MTU - sizeof(Air2Ground_Video_Packet);
 
@@ -1220,12 +1228,10 @@ IRAM_ATTR size_t camera_data_available(void * cam_obj,const uint8_t* data, size_
             applyAdaptiveQuality();
             s_video_full_frame_size = 0;
 
-#ifdef UART_MSP_OSD
-        if ( g_osd.isChanged() )
-        {
-            send_air2ground_osd_packet();
-        }
-#endif            
+            if ( g_osd.isChanged() )
+            {
+                send_air2ground_osd_packet();
+            }
         }
     }
 

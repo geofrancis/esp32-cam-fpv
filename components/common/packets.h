@@ -150,17 +150,11 @@ struct Air2Ground_Video_Packet : Air2Ground_Header
     Resolution resolution;
     uint8_t part_index : 7;
     uint8_t last_part : 1;
-    uint8_t wifi_queue : 7;
-    uint8_t air_record_state : 1;
-    WIFI_Rate curr_wifi_rate;
     uint32_t frame_index = 0;
-    uint16_t freeSpaceGB16 : 12;
-    uint16_t totalSpaceGB16 : 12;
-    uint16_t curr_quality : 8;
     //data follows
 };
 
-static_assert(sizeof(Air2Ground_Video_Packet) == 20, "");
+static_assert(sizeof(Air2Ground_Video_Packet) == 14, "");
 
 struct Air2Ground_Data_Packet : Air2Ground_Header
 {
@@ -181,8 +175,23 @@ struct OSDBuffer
 
 struct Air2Ground_OSD_Packet : Air2Ground_Header
 {
+    uint8_t SDDetected : 1;
+    uint8_t SDSlow : 1;
+    uint8_t SDError : 1;
+    uint8_t curr_wifi_rate :5; //WIFI_Rate
+
+    uint8_t wifi_queue : 7;
+    uint8_t air_record_state : 1;
+
+    uint16_t SDFreeSpaceGB16 : 12;
+    uint16_t SDTotalSpaceGB16 : 12;
+    uint16_t curr_quality : 7;
+    uint16_t unused : 1;
+
     OSDBuffer buffer;
 };
+
+static_assert(sizeof(Air2Ground_OSD_Packet) <= AIR2GROUND_MTU, "");
 
 
 ///////////////////////////////////////////////////////////////////////////////////////

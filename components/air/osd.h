@@ -14,8 +14,6 @@
 #define IRAM_ATTR
 #endif
 
-#ifdef UART_MSP_OSD
-
 class OSD
 {
 private:
@@ -34,5 +32,3 @@ public:
 };
 
 extern OSD g_osd;
-
-#endif //UART_MSP_OSD
