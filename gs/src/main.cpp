@@ -563,7 +563,7 @@ int run(char* argv[])
         ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
         ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-        ImGui::Begin("fullscreen", NULL, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBackground /*| ImGuiWindowFlags_Inputs*/);
+        ImGui::Begin("fullscreen", NULL, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav  | ImGuiWindowFlags_NoFocusOnAppearing);
         {
             if ( s_air_record )
             {
@@ -639,21 +639,54 @@ int run(char* argv[])
                 ImGui::SliderInt("Quality(0-auto)", &value, 0, 63);
                 config.camera.quality = value;
             }
+
+            ImGui::Checkbox("AGC", &config.camera.agc);
+            ImGui::SameLine();            
+            ImGui::Checkbox("AEC", &config.camera.aec);
+            if ( config.camera.aec )
+            {
+                ImGui::SameLine();            
+                ImGui::Checkbox("AEC DSP", &config.camera.aec2);
+            }
+
+            if ( !config.camera.agc )
+            {
+                int value = config.camera.agc_gain;
+                ImGui::SliderInt("AGC Gain", &value, 0, 30);
+                config.camera.agc_gain = (int8_t)value;
+            }
+            else 
             {
                 int value = config.camera.gainceiling;
-                ImGui::SliderInt("GainCeiling", &value, 0, 6);
+                ImGui::SliderInt("GainCeiling", &value, 2, 128);
                 config.camera.gainceiling = (uint8_t)value;
             }
+
+            if ( config.camera.aec )
+            {
+                int value = config.camera.ae_level;
+                ImGui::SliderInt("AEC Level", &value, -2, 2);
+                config.camera.ae_level = (int8_t)value;
+            }
+            else 
+            {
+                int value = config.camera.aec_value;
+                ImGui::SliderInt("AEC Value", &value, 0, 1200);
+                config.camera.aec_value = (uint16_t)value;
+            }
+
             {
                 int value = config.camera.sharpness;
-                ImGui::SliderInt("Sharpness", &value, -1, 6);
+                ImGui::SliderInt("Sharpness(3-auto)", &value, -2, 3);
                 config.camera.sharpness = (int8_t)value;
             }
+/*            
             {
                 int value = config.camera.denoise;
-                ImGui::SliderInt("Denoise", &value, 0, 0xFF);
+                ImGui::SliderInt("Denoise", &value, 0, 8);
                 config.camera.denoise = (int8_t)value;
             }
+*/            
             {
                 ImGui::SliderInt("WIFI Channel", &s_groundstation_config.wifi_channel, 1, 13);
             }

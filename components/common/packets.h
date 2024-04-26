@@ -92,27 +92,29 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
     uint16_t fec_codec_mtu = AIR2GROUND_MTU;
     uint8_t air_record_btn = 0; //incremented each time button is pressed on gs
 
+    //Description of some settings:
+    //https://heyrick.eu/blog/index.php?diary=20210418&keitai=0
     struct Camera
     {
         Resolution resolution = Resolution::SVGA;
-        uint8_t fps_limit = 35;
-        uint8_t quality = 0;//0 - 63
+        uint8_t fps_limit = 30;
+        uint8_t quality = 0;//0 - 63  0-auto
         int8_t brightness = 0;//-2 - 2
         int8_t contrast = 0;//-2 - 2
         int8_t saturation = 1;//-2 - 2
-        int8_t sharpness = 3;//-3 - 3
-        uint8_t denoise = 0;
+        int8_t sharpness = 0;//-3 - 3
+        uint8_t denoise = 0;  //0..8, ov5640 only
         uint8_t special_effect = 0;//0 - 6
         bool awb = true;
         bool awb_gain = true;
         uint8_t wb_mode = 0;//0 - 4
-        bool aec = true;
-        bool aec2 = true;
-        int8_t ae_level = 1;//-2 - 2
-        uint16_t aec_value = 204;//0 - 1200
-        bool agc = false;
-        uint8_t agc_gain = 0;//0 - 30
-        uint8_t gainceiling = 3;//0 - 6
+        bool aec = true; //automatic exposure control
+        bool aec2 = true; //enable aec DSP (better processing?)
+        int8_t ae_level = 1;//-2 - 2, for aec=true
+        uint16_t aec_value = 204;//0 - 1200 ISO, for aec=false
+        bool agc = false;  //automatic gain control
+        uint8_t agc_gain = 0;//0 - 30, for agc=false
+        uint8_t gainceiling = 3;//2 - 128, for agc=true
         bool bpc = true;
         bool wpc = true;
         bool raw_gma = true;
