@@ -3,7 +3,10 @@ BIN := gs
 IMGUI_DIR = src/imgui/
 SRCS := src/main.cpp \
 	src/droid_sans_font.cpp \
-	src/HUD.cpp \
+	src/osd.cpp \
+	src/utils/lodepng.cpp \
+	src/utils/util.cpp \
+	src/fontwalksnail.cpp \
 	src/PI_HAL.cpp \
 	src/Comms.cpp \
 	src/Video_Decoder.cpp \

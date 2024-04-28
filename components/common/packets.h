@@ -2,6 +2,10 @@
 
 #include "structures.h"
 
+#define DEFAULT_WIFI_CHANNEL 7
+
+#define PACKET_VERSION 1
+
 #pragma pack(push, 1) // exact fit - no padding
 
 enum class WIFI_Rate : uint8_t
@@ -84,33 +88,35 @@ struct Ground2Air_Config_Packet : Ground2Air_Header
     uint8_t ping = 0; //used for latency measurement
     int8_t wifi_power = 20;//dBm
     WIFI_Rate wifi_rate = WIFI_Rate::RATE_G_24M_ODFM;
-    uint8_t wifi_channel = 11;
+    uint8_t wifi_channel = DEFAULT_WIFI_CHANNEL;
     uint8_t fec_codec_k = 6;
     uint8_t fec_codec_n = 12;
     uint16_t fec_codec_mtu = AIR2GROUND_MTU;
-    bool dvr_record = false;
+    uint8_t air_record_btn = 0; //incremented each time button is pressed on gs
 
+    //Description of some settings:
+    //https://heyrick.eu/blog/index.php?diary=20210418&keitai=0
     struct Camera
     {
         Resolution resolution = Resolution::SVGA;
-        uint8_t fps_limit = 35;
-        uint8_t quality = 0;//0 - 63
+        uint8_t fps_limit = 30;
+        uint8_t quality = 0;//0 - 63  0-auto
         int8_t brightness = 0;//-2 - 2
         int8_t contrast = 0;//-2 - 2
         int8_t saturation = 1;//-2 - 2
-        int8_t sharpness = 3;//-3 - 3
-        uint8_t denoise = 0;
+        int8_t sharpness = 0;//-3 - 3
+        uint8_t denoise = 0;  //0..8, ov5640 only
         uint8_t special_effect = 0;//0 - 6
         bool awb = true;
         bool awb_gain = true;
         uint8_t wb_mode = 0;//0 - 4
-        bool aec = true;
-        bool aec2 = true;
-        int8_t ae_level = 1;//-2 - 2
-        uint16_t aec_value = 204;//0 - 1200
-        bool agc = false;
-        uint8_t agc_gain = 0;//0 - 30
-        uint8_t gainceiling = 3;//0 - 6
+        bool aec = true; //automatic exposure control
+        bool aec2 = true; //enable aec DSP (better processing?)
+        int8_t ae_level = 1;//-2 - 2, for aec=true
+        uint16_t aec_value = 204;//0 - 1200 ISO, for aec=false
+        bool agc = false;  //automatic gain control
+        uint8_t agc_gain = 0;//0 - 30, for agc=false
+        uint8_t gainceiling = 3;//2 - 128, for agc=true
         bool bpc = true;
         bool wpc = true;
         bool raw_gma = true;
@@ -130,12 +136,14 @@ struct Air2Ground_Header
     enum class Type : uint8_t
     {
         Video,
-        Telemetry
+        Telemetry,
+        OSD
     };
 
     Type type = Type::Video; 
     uint32_t size = 0;
     uint8_t pong = 0; //used for latency measurement
+    uint8_t version; //PACKET_VERSION
     uint8_t crc = 0;
 };
 
@@ -144,17 +152,49 @@ struct Air2Ground_Video_Packet : Air2Ground_Header
     Resolution resolution;
     uint8_t part_index : 7;
     uint8_t last_part : 1;
-    uint8_t wifi_queue;
-    WIFI_Rate curr_wifi_rate;
     uint32_t frame_index = 0;
     //data follows
 };
+
+static_assert(sizeof(Air2Ground_Video_Packet) == 14, "");
 
 struct Air2Ground_Data_Packet : Air2Ground_Header
 {
 };
 
-static_assert(sizeof(Air2Ground_Video_Packet) == 15, "");
+
+#define OSD_COLS 53
+#define OSD_COLS_H 7 //56 bits
+#define OSD_ROWS 20
+
+#define OSD_BUFFER_SIZE (OSD_ROWS*OSD_COLS + OSD_ROWS*OSD_COLS_H)
+
+struct OSDBuffer
+{
+    uint8_t screenLow[OSD_ROWS][OSD_COLS];
+    uint8_t screenHigh[OSD_ROWS][OSD_COLS_H];
+};
+
+struct Air2Ground_OSD_Packet : Air2Ground_Header
+{
+    uint8_t SDDetected : 1;
+    uint8_t SDSlow : 1;
+    uint8_t SDError : 1;
+    uint8_t curr_wifi_rate :5; //WIFI_Rate
+
+    uint8_t wifi_queue : 7;
+    uint8_t air_record_state : 1;
+
+    uint16_t SDFreeSpaceGB16 : 12;
+    uint16_t SDTotalSpaceGB16 : 12;
+    uint16_t curr_quality : 7;
+    uint16_t unused : 1;
+
+    OSDBuffer buffer;
+};
+
+static_assert(sizeof(Air2Ground_OSD_Packet) <= AIR2GROUND_MTU, "");
+
 
 ///////////////////////////////////////////////////////////////////////////////////////
 

@@ -40,7 +40,7 @@ public:
 
     void send(void const* data, size_t size, bool flush);
     //std::function<void(void const* data, size_t size)> on_data_received;
-    bool receive(void* data, size_t& size);
+    bool receive(void* data, size_t& size, bool& restoredByFEC);
 
     size_t get_data_rate() const;
     int get_input_dBm() const;

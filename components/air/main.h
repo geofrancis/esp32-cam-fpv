@@ -8,24 +8,33 @@
 //For esp32cam
 #ifdef BOARD_ESP32CAM
 
+//Debug log is on UART0
+//UART2 can be used for Mavlink or Displayport OSD
+
+//define to use mavlink telemetry on UART2
+//#define UART_MAVLINK UART_NUM_2
+
+//define to use MSP Displayport OSD on UART2
+#define UART_MSP_OSD UART_NUM_2
+
+//------------------------------------
 #define CAMERA_MODEL_AI_THINKER
 #define DVR_SUPPORT
 
-//define to use mavlink telemetry on UART2 pins 13/14
-#define UART_MAVLINK
-//Mavlink UART2
+#define INIT_UART_0
+#define TXD0_PIN    1
+#define RXD0_PIN    4  //moved from pin 3 to pin 4 to free pin 3 for a REC button
+
+#define INIT_UART_2
 #define TXD2_PIN    12   //should be low at boot!!!
 #define RXD2_PIN    13 
+#define UART2_BAUDRATE 115200
 
 #define STATUS_LED_PIN GPIO_NUM_33
 #define STATUS_LED_ON 0
 #define STATUS_LED_OFF 1
 #define FLASH_LED_PIN GPIO_NUM_4
 #define REC_BUTTON_PIN  3
-
-//Debug UART0
-#define TXD0_PIN    1
-#define RXD0_PIN    4  //move from pin 3 to pin 4 to free pin 3 for a REC button
 
 #endif
 
@@ -37,6 +46,15 @@
 
 #ifdef BOARD_XIAOS3SENSE
 
+//Debug is on USB UART
+//UART1 and UART2 can be used for Mavlink and Displayport OSD
+
+//define to use mavlink telemetry on UART2 
+//#define UART_MAVLINK UART_NUM_2
+
+//define to use DisplayPort OSD on UART1
+#define UART_MSP_OSD UART_NUM_1
+
 #define CAMERA_MODEL_XIAO_ESP32S3
 #define DVR_SUPPORT
 #define STATUS_LED_PIN GPIO_NUM_1
@@ -44,22 +62,18 @@
 #define STATUS_LED_OFF 0
 #define REC_BUTTON_PIN  0
 
-#define UART_MAVLINK
-//Mavlink UART2
-#define TXD2_PIN    43 
-#define RXD2_PIN    44 
+#define INIT_UART_1
+#define TXD1_PIN    2 //D1
+#define RXD1_PIN    4 //D3
+#define UART1_BAUDRATE 115200
 
-#define UART_MSP_OSD
-//UART1 OSD
-#define TXD1_PIN    2 
-#define RXD1_PIN    4 
+#define INIT_UART_2
+#define TXD2_PIN    43 //D6
+#define RXD2_PIN    44 //D7
+#define UART2_BAUDRATE 115200
 
 #endif
 //===============================================================
-
-
-#define DEFAULT_WIFI_CHANNEL 11
-extern uint16_t g_wifi_channel;
 
 
 #if defined(CAMERA_MODEL_WROVER_KIT)
